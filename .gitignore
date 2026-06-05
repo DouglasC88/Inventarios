@@ -1,0 +1,14 @@
+# Dependencias (la app no las usa; SheetJS va incluido en vendor/)
+node_modules/
+package-lock.json
+
+# Sistema operativo / editores
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+
+# Temporales
+*.log
+*.tmp

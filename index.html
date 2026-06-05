@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Conversor de Inventarios · Dentos</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <span class="logo">🦷</span>
+      <div>
+        <h1>Conversor de Inventarios · Dentos</h1>
+        <p class="subtitle">Carga el archivo del cliente → la app lo organiza → descarga el TXT para Dentos</p>
+      </div>
+    </div>
+  </header>
+
+  <!-- ============ ZONA DE ARCHIVO (compartida por ambos módulos) ============ -->
+  <section class="card archivo-zona">
+    <div class="card-head">
+      <h2>1 · Archivo del cliente</h2>
+      <span id="archivo-badge" class="badge" hidden></span>
+    </div>
+
+    <div id="dropzone" class="dropzone">
+      <input type="file" id="input-archivo" accept=".xlsx,.xls,.csv,.txt" hidden />
+      <p class="dz-icono">📥</p>
+      <p><strong>Arrastra aquí</strong> el Excel/CSV/TXT del cliente<br />o <button type="button" class="btn ghost" id="btn-elegir">elige un archivo</button></p>
+      <p class="muted">Acepta .xlsx, .xls, .csv y .txt · Se reutiliza para Insumos y Kardex</p>
+    </div>
+
+    <div id="archivo-opciones" class="archivo-opciones" hidden>
+      <div class="opt-row">
+        <label id="lbl-hoja" hidden>Hoja
+          <select id="sel-hoja"></select>
+        </label>
+        <label>Primera fila
+          <select id="sel-encabezado">
+            <option value="si">Son encabezados</option>
+            <option value="no">Son datos (sin encabezado)</option>
+          </select>
+        </label>
+        <label id="lbl-delim">Delimitador (CSV/TXT)
+          <select id="sel-delim">
+            <option value="auto">Auto-detectar</option>
+            <option value="\t">Tabulación</option>
+            <option value=";">Punto y coma ;</option>
+            <option value=",">Coma ,</option>
+            <option value="|">Barra |</option>
+          </select>
+        </label>
+        <label id="lbl-encode">Codificación (CSV/TXT)
+          <select id="sel-encode-in">
+            <option value="auto">Auto-detectar</option>
+            <option value="utf-8">UTF-8</option>
+            <option value="windows-1252">ANSI (Windows-1252)</option>
+          </select>
+        </label>
+        <button type="button" class="btn ghost" id="btn-quitar-archivo">✖ Quitar archivo</button>
+      </div>
+      <div class="table-wrap preview-datos">
+        <table id="tabla-preview"><thead></thead><tbody></tbody></table>
+      </div>
+      <p class="muted" id="preview-resumen"></p>
+    </div>
+  </section>
+
+  <!-- ============ MÓDULOS ============ -->
+  <nav class="tabs">
+    <button class="tab active" data-tab="insumos">📦 Carga de insumos</button>
+    <button class="tab" data-tab="kardex">📑 Kardex / Stock</button>
+    <button class="tab" data-tab="formato">⚙️ Formato Dentos</button>
+  </nav>
+
+  <main>
+    <!-- ---- Plantilla reutilizable para módulos Insumos y Kardex ---- -->
+    <template id="tpl-modulo">
+      <section class="panel modulo">
+        <div class="card sin-archivo-aviso">
+          <p class="empty">⬆️ Primero carga un archivo del cliente arriba para poder mapear las columnas.</p>
+        </div>
+
+        <div class="card con-archivo">
+          <div class="card-head">
+            <h2>2 · Asignar columnas → campos de Dentos</h2>
+            <div class="plantilla-bar">
+              <select class="sel-plantilla"><option value="">— Aplicar plantilla —</option></select>
+              <button type="button" class="btn ghost btn-guardar-plantilla">💾 Guardar plantilla</button>
+              <button type="button" class="btn ghost btn-borrar-plantilla" title="Eliminar la plantilla seleccionada">🗑️</button>
+            </div>
+          </div>
+          <p class="hint">Para cada campo que pide Dentos, elige de qué columna del archivo sale (o un valor fijo igual para todas las filas).</p>
+          <div class="table-wrap">
+            <table class="tabla-mapeo">
+              <thead>
+                <tr><th>Campo de Dentos</th><th>Origen</th><th>Valor fijo / detalle</th></tr>
+              </thead>
+              <tbody class="mapeo-body"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card con-archivo">
+          <div class="card-head">
+            <h2>3 · Generar archivo para Dentos</h2>
+            <button type="button" class="btn primary btn-generar">⬇️ Generar y descargar</button>
+          </div>
+          <p class="muted resumen-salida"></p>
+          <h4>Vista previa <span class="muted">(→ = tabulación)</span></h4>
+          <pre class="preview salida-preview"></pre>
+        </div>
+      </section>
+    </template>
+
+    <div id="tab-insumos" class="panel-host active"></div>
+    <div id="tab-kardex" class="panel-host"></div>
+
+    <!-- ============ FORMATO DENTOS (configuración) ============ -->
+    <section id="tab-formato" class="panel-host">
+      <div class="card">
+        <h2>Campos de salida que pide Dentos</h2>
+        <p class="hint">
+          Define el <strong>orden y los nombres</strong> de las columnas de cada archivo de carga.
+          Es el formato que la app va a generar. Cuando cargues las 2 plantillas reales de Dentos, ajustamos esto y queda guardado.
+        </p>
+        <div class="formato-grid">
+          <div class="formato-box">
+            <h3>📦 Insumos</h3>
+            <ul class="campos-lista" id="campos-insumos"></ul>
+            <div class="add-campo">
+              <input type="text" id="nuevo-campo-insumos" placeholder="Nuevo campo (ej. lote)" />
+              <button type="button" class="btn ghost" id="btn-add-insumos">＋ Agregar</button>
+            </div>
+          </div>
+          <div class="formato-box">
+            <h3>📑 Kardex / Stock</h3>
+            <ul class="campos-lista" id="campos-kardex"></ul>
+            <div class="add-campo">
+              <input type="text" id="nuevo-campo-kardex" placeholder="Nuevo campo (ej. saldo)" />
+              <button type="button" class="btn ghost" id="btn-add-kardex">＋ Agregar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Opciones del archivo de salida</h2>
+        <div class="grid-form">
+          <label>Delimitador
+            <select id="op-delim">
+              <option value="\t">Tabulación (lo que pide Dentos)</option>
+              <option value=";">Punto y coma ;</option>
+              <option value=",">Coma ,</option>
+              <option value="|">Barra |</option>
+            </select>
+          </label>
+          <label>Encabezado
+            <select id="op-encabezado">
+              <option value="no">Sin encabezado (lo que pide Dentos)</option>
+              <option value="si">Con encabezado</option>
+            </select>
+          </label>
+          <label>Fin de línea
+            <select id="op-eol">
+              <option value="crlf">Windows (CRLF)</option>
+              <option value="lf">Unix (LF)</option>
+            </select>
+          </label>
+          <label>Codificación
+            <select id="op-encode">
+              <option value="utf-8">UTF-8</option>
+              <option value="windows-1252">ANSI (Windows-1252)</option>
+            </select>
+          </label>
+        </div>
+        <p class="hint">Si en Dentos los acentos o la ñ salen raros, cambia la codificación a <strong>ANSI (Windows-1252)</strong>.</p>
+      </div>
+
+      <div class="card">
+        <h2>Configuración y datos</h2>
+        <p class="hint">El formato y las plantillas se guardan en este navegador. Puedes respaldarlos o reiniciarlos.</p>
+        <div class="form-actions">
+          <button class="btn" id="btn-respaldo">⬇️ Descargar respaldo (JSON)</button>
+          <label class="btn" for="input-restaurar">⬆️ Restaurar respaldo</label>
+          <input type="file" id="input-restaurar" accept="application/json" hidden />
+          <button class="btn danger" id="btn-reset">↺ Restaurar valores por defecto</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="vendor/xlsx.full.min.js"></script>
+  <script src="core.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
