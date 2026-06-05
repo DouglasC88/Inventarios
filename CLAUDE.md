@@ -10,9 +10,10 @@ que reconoce **Dentos**: **TXT delimitado por tabulación, sin encabezado**.
   hacer `commit` y `push` de cada avance funcional sin abrir Pull Request ni
   pedir confirmación para cada cambio (salvo que el usuario indique lo
   contrario). No usar ramas/staging intermedios como paso obligatorio.
-  > Nota operativa: en este entorno el push va a la rama de trabajo designada
-  > (`claude/sweet-sagan-Zohan`). Si "producción" debe ser otra rama (p. ej.
-  > `main`), confirmarlo con el usuario una sola vez.
+  > **Producción = Vercel, conectado a la rama `main`.** Cada avance se publica
+  > llevando los cambios a `main` (merge + push), lo que dispara el deploy
+  > automático de Vercel. Se desarrolla en `claude/sweet-sagan-Zohan` y se
+  > sincroniza `main` para que producción quede al día.
 
 ## Cómo funciona
 
