@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Contact, Pencil, Plus } from 'lucide-react';
+import { Contact, FileSpreadsheet, Pencil, Plus } from 'lucide-react';
 import { useStore, C } from '../store.jsx';
 import { Btn, Chip, Empty, Errores, Field, Modal, Panel, SearchBox, Tabs } from '../components/ui.jsx';
 import Combo from '../components/Combo.jsx';
@@ -188,7 +188,7 @@ export function FormTercero({ inicial, onClose, onGuardado, tipoInicial }) {
 export const FormProveedor = FormTercero;
 
 export default function Terceros({ arg }) {
-  const { db, state, puede } = useStore();
+  const { db, state, puede, go } = useStore();
   const [q, setQ] = useState('');
   const [tipo, setTipo] = useState('todos');
   const [editar, setEditar] = useState(arg === 'nuevo' ? {} : null);
@@ -204,7 +204,7 @@ export default function Terceros({ arg }) {
   const cuenta = (k) => db.proveedores.filter((t) => (t.tipos || ['proveedor']).includes(k)).length;
   return (
     <Panel title="Terceros" icon={Contact} sub="Proveedores, clientes, pacientes y empleados identificados con NIT o documento. Busque por número de documento o por nombre."
-      actions={puede('maestros') && <Btn variant="primary" icon={Plus} onClick={() => setEditar({})}>Nuevo tercero</Btn>}>
+      actions={<>{puede('importar') && <Btn icon={FileSpreadsheet} onClick={() => go('importar', 'terceros')} title="Crear o actualizar muchos terceros con un archivo Excel o CSV">Cargar desde Excel</Btn>}{puede('maestros') && <Btn variant="primary" icon={Plus} onClick={() => setEditar({})}>Nuevo tercero</Btn>}</>}>
       <div className="toolbar">
         <SearchBox value={q} onChange={setQ} placeholder="Buscar por NIT, cédula o nombre" />
         <Tabs value={tipo} onChange={setTipo} options={[['todos', 'Todos (' + db.proveedores.length + ')'], ...Object.entries(C.TIPOS_TERCERO).map(([k, v]) => [k, v + ' (' + cuenta(k) + ')'])]} />

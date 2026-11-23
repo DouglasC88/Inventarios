@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Boxes, Download, Pencil, Pill, Plus, ScrollText, Snowflake, Stethoscope, Syringe, Trash2, Wrench, Package } from 'lucide-react';
+import { Boxes, Download, FileSpreadsheet, Pencil, Pill, Plus, ScrollText, Snowflake, Stethoscope, Syringe, Trash2, Wrench, Package } from 'lucide-react';
 import { useStore, C } from '../store.jsx';
 import { SelectBodega, SelectGrupo, SelectTercero } from '../components/Movimientos.jsx';
 import { Btn, Chip, Empty, Errores, Field, Modal, Nota, Panel, SearchBox, Tabs } from '../components/ui.jsx';
@@ -233,7 +233,7 @@ export default function Productos({ arg }) {
 
   return (
     <Panel title="Maestro de productos" icon={Boxes} sub={num(lista.length) + ' productos'}
-      actions={<><Btn icon={Download} onClick={exportar}>Exportar</Btn>{puede('maestros') && <Btn variant="primary" icon={Plus} onClick={() => setElegir(true)}>Nuevo</Btn>}</>}>
+      actions={<><Btn icon={Download} onClick={exportar}>Exportar</Btn>{puede('importar') && <Btn icon={FileSpreadsheet} onClick={() => go('importar', 'productos')} title="Crear o actualizar muchos productos y sus existencias con un archivo Excel o CSV">Cargar desde Excel</Btn>}{puede('maestros') && <Btn variant="primary" icon={Plus} onClick={() => setElegir(true)}>Nuevo</Btn>}</>}>
       <div className="toolbar">
         <SearchBox value={q} onChange={setQ} placeholder="Nombre, código, marca, referencia, código de barras, INVIMA" />
         <div style={{ width: 300, maxWidth: '100%' }}><SelectGrupo value={grupo} onChange={setGrupo} incluirTodos incluirSin /></div>
