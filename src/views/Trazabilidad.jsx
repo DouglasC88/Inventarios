@@ -13,8 +13,8 @@ export default function Trazabilidad() {
     setBuscado(g && g.lote ? g.lote : texto.trim());
   };
   const res = C.trazabilidad(db, state, buscado);
-  const recibido = res.filter((r) => !r.anulado && (r.tipo === 'entrada' || (r.tipo === 'ajuste' && r.cantidad > 0))).reduce((s, r) => s + r.cantidad, 0);
-  const usado = res.filter((r) => !r.anulado && (r.tipo === 'salida' || r.tipo === 'baja' || (r.tipo === 'ajuste' && r.cantidad < 0))).reduce((s, r) => s + Math.abs(r.cantidad), 0);
+  const recibido = res.filter((r) => !r.anulado && (r.tipo === 'entrada' || r.tipo === 'inicial' || (r.tipo === 'ajuste' && r.cantidad > 0))).reduce((s, r) => s + r.cantidad, 0);
+  const usado = res.filter((r) => !r.anulado && (r.tipo === 'salida' || r.tipo === 'baja' || r.tipo === 'devolucion' || (r.tipo === 'ajuste' && r.cantidad < 0))).reduce((s, r) => s + Math.abs(r.cantidad), 0);
   const pacientes = new Set(res.filter((r) => !r.anulado && r.tipo === 'salida' && r.mov.destinoTipo === 'Paciente').map((r) => r.mov.destino));
 
   return (
@@ -42,7 +42,7 @@ export default function Trazabilidad() {
                     <div><Chip tone={TONO_MOV[r.tipo]} dot>{C.TIPOS_MOV[r.tipo]}</Chip><div className="small muted" style={{ marginTop: 6 }}>{fecha(r.fecha)}</div></div>
                     <div>
                       <div className="strong">{r.producto ? r.producto.nombre : '—'} · lote <span className="mono">{r.linea.lote}</span></div>
-                      <div className="small muted">{r.num} · {r.detalle}{r.anulado ? ' · ANULADO' : ''}</div>
+                      <div className="small muted">{r.num} · {r.bodega} · {r.detalle}{r.anulado ? ' · ANULADO' : ''}</div>
                     </div>
                     <div className="num"><div className="strong">{num(r.cantidad)}</div><div className="small muted">{r.valor !== null ? money(r.valor) : ''}</div></div>
                   </div>

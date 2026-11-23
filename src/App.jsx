@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import {
-  Boxes, CalendarClock, ClipboardCheck, Hexagon, LayoutDashboard, Lock, Menu, PackageMinus, PackagePlus,
-  Scale, ScanSearch, ScrollText, Settings, SlidersHorizontal, Thermometer, Truck
+  ArrowRightLeft, BarChart3, Boxes, CalendarClock, ClipboardCheck, ClipboardList, FileSpreadsheet, Hexagon, Layers,
+  LayoutDashboard, Lock, LogOut, Menu, PackageMinus, PackagePlus, RefreshCcw, Scale, ScanSearch, ScrollText,
+  Settings, ShoppingCart, SlidersHorizontal, Thermometer, Truck, Undo2, UsersRound
 } from 'lucide-react';
 import { useStore, C } from './store.jsx';
 import { Toasts } from './components/ui.jsx';
@@ -10,6 +11,10 @@ import Productos from './views/Productos.jsx';
 import Proveedores from './views/Proveedores.jsx';
 import Entradas from './views/Entradas.jsx';
 import Salidas from './views/Salidas.jsx';
+import Traslados from './views/Traslados.jsx';
+import Requisiciones from './views/Requisiciones.jsx';
+import Ordenes from './views/Ordenes.jsx';
+import Devoluciones from './views/Devoluciones.jsx';
 import Ajustes from './views/Ajustes.jsx';
 import Conteos from './views/Conteos.jsx';
 import Kardex from './views/Kardex.jsx';
@@ -17,34 +22,51 @@ import Lotes from './views/Lotes.jsx';
 import Trazabilidad from './views/Trazabilidad.jsx';
 import Frio from './views/Frio.jsx';
 import Cierres from './views/Cierres.jsx';
+import Reabastecimiento from './views/Reabastecimiento.jsx';
+import Reportes from './views/Reportes.jsx';
+import Kits from './views/Kits.jsx';
 import Normativa from './views/Normativa.jsx';
 import Configuracion from './views/Configuracion.jsx';
+import Usuarios from './views/Usuarios.jsx';
+import Importar from './views/Importar.jsx';
+import Login from './views/Login.jsx';
 
+// [clave, título, ícono, vista, permiso requerido para verla (opcional)]
 const NAV = [
   ['Operación', [
     ['panel', 'Centro de control', LayoutDashboard, Dashboard],
     ['entradas', 'Entradas', PackagePlus, Entradas],
-    ['salidas', 'Salidas', PackageMinus, Salidas],
+    ['salidas', 'Salidas y consumos', PackageMinus, Salidas],
+    ['traslados', 'Traslados', ArrowRightLeft, Traslados],
+    ['requisiciones', 'Requisiciones', ClipboardList, Requisiciones],
+    ['devoluciones', 'Devoluciones', Undo2, Devoluciones],
     ['ajustes', 'Ajustes y bajas', SlidersHorizontal, Ajustes],
     ['conteos', 'Conteos físicos', ClipboardCheck, Conteos]
+  ]],
+  ['Compras', [
+    ['ordenes', 'Órdenes de compra', ShoppingCart, Ordenes],
+    ['reabastecimiento', 'Reabastecimiento', RefreshCcw, Reabastecimiento]
   ]],
   ['Control', [
     ['kardex', 'Kardex', ScrollText, Kardex],
     ['lotes', 'Lotes y vencimientos', CalendarClock, Lotes],
     ['trazabilidad', 'Trazabilidad', ScanSearch, Trazabilidad],
     ['frio', 'Cadena de frío', Thermometer, Frio],
+    ['reportes', 'Reportes y análisis', BarChart3, Reportes],
     ['cierres', 'Cierres de periodo', Lock, Cierres]
   ]],
   ['Maestros', [
     ['productos', 'Productos', Boxes, Productos],
+    ['kits', 'Kits por procedimiento', Layers, Kits],
     ['proveedores', 'Proveedores', Truck, Proveedores]
   ]],
   ['Sistema', [
     ['normativa', 'Normativa', Scale, Normativa],
-    ['config', 'Configuración', Settings, Configuracion]
+    ['importar', 'Importar datos', FileSpreadsheet, Importar, 'importar'],
+    ['usuarios', 'Usuarios y roles', UsersRound, Usuarios, 'usuarios'],
+    ['config', 'Configuración', Settings, Configuracion, 'config']
   ]]
 ];
-const PLANO = NAV.flatMap(([, items]) => items);
 
 function Reloj() {
   const [t, setT] = useState(() => new Date());
@@ -57,14 +79,19 @@ function Reloj() {
 }
 
 export default function App() {
-  const { db, state, hoy, ruta, toasts } = useStore();
+  const { db, state, hoy, ruta, toasts, usuario, requiereLogin, salir, puede } = useStore();
   const [menu, setMenu] = useState(false);
-  const actual = PLANO.find((x) => x[0] === ruta.vista) || PLANO[0];
+  const nav = NAV.map(([g, items]) => [g, items.filter((x) => !x[4] || puede(x[4]))]).filter(([, items]) => items.length);
+  const plano = nav.flatMap(([, items]) => items);
+  const actual = plano.find((x) => x[0] === ruta.vista) || plano[0];
   const Vista = actual[3];
-  const criticas = C.alertas(db, state, hoy).filter((a) => a.nivel === 'critico').length;
+  const criticas = requiereLogin ? 0 : C.alertas(db, state, hoy).filter((a) => a.nivel === 'critico').length;
+  const rqPend = db.requisiciones.filter((r) => ['pendiente', 'parcial'].includes(C.estadoRequisicion(db, r).estado)).length;
 
   useEffect(() => { setMenu(false); }, [ruta]);
   useEffect(() => { document.title = actual[1] + ' · NOVA Inventario'; }, [actual]);
+
+  if (requiereLogin) return <><Login /><Toasts items={toasts} /></>;
 
   return (
     <>
@@ -79,13 +106,14 @@ export default function App() {
             </div>
           </div>
           <nav className="nav">
-            {NAV.map(([grupo, items]) => (
+            {nav.map(([grupo, items]) => (
               <div key={grupo}>
                 <div className="nav-group">{grupo}</div>
                 {items.map(([k, label, Icon]) => (
                   <a key={k} href={'#/' + k} className={actual[0] === k ? 'active' : ''}>
                     <Icon size={18} />{label}
                     {k === 'panel' && criticas > 0 && <span className="count">{criticas}</span>}
+                    {k === 'requisiciones' && rqPend > 0 && <span className="count">{rqPend}</span>}
                   </a>
                 ))}
               </div>
@@ -101,11 +129,17 @@ export default function App() {
           <header className="topbar">
             <button type="button" className="btn menu-btn icon-btn" onClick={() => setMenu((m) => !m)} aria-label="Abrir menú"><Menu size={18} /></button>
             <div>
-              <div className="crumb">NOVA · {NAV.find(([, items]) => items.includes(actual))[0]}</div>
+              <div className="crumb">NOVA · {(nav.find(([, items]) => items.includes(actual)) || ['Inicio'])[0]}</div>
               <h1>{actual[1]}</h1>
             </div>
             <div className="spacer" />
             <Reloj />
+            {usuario && (
+              <div className="userchip">
+                <div className="who"><b>{usuario.nombre}</b><span>{C.ROLES[usuario.rol]}{usuario.bodega ? ' · ' + usuario.bodega : ''}</span></div>
+                <button type="button" className="btn ghost icon-btn" onClick={salir} title="Cerrar sesión" aria-label="Cerrar sesión"><LogOut size={16} /></button>
+              </div>
+            )}
           </header>
           <Vista arg={ruta.arg} />
         </main>

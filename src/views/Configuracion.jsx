@@ -6,7 +6,7 @@ import { Btn, Errores, Field, Modal, Nota, Panel } from '../components/ui.jsx';
 import { descargar, fechaHora } from '../format.js';
 
 export default function Configuracion() {
-  const { db, hoy, commit, reemplazar, toast } = useStore();
+  const { db, hoy, commit, reemplazar, toast, go } = useStore();
   const cfg = db.config;
   const year = C.yearOf(hoy);
   const [f, setF] = useState(() => ({
@@ -14,6 +14,7 @@ export default function Configuracion() {
     rojo: cfg.semaforo.rojo, amarillo: cfg.semaforo.amarillo, invimaAviso: cfg.invimaAviso,
     limiteFaltantes: cfg.limiteFaltantes, frioMin: cfg.frio.min, frioMax: cfg.frio.max,
     ubicaciones: cfg.ubicaciones.join(', '),
+    consumoDias: cfg.reabastecimiento.consumoDias, seguridadDias: cfg.reabastecimiento.seguridadDias, coberturaDias: cfg.reabastecimiento.coberturaDias,
     metodoActual: C.metodoDe(cfg, hoy + ''), metodoSiguiente: (cfg.metodos || {})[String(year + 1)] || C.metodoDe(cfg, hoy)
   }));
   const [err, setErr] = useState([]);
@@ -28,7 +29,12 @@ export default function Configuracion() {
     if (!(Number(f.rojo) > 0) || !(Number(f.amarillo) > Number(f.rojo))) e.push('El umbral amarillo debe ser mayor que el rojo y ambos positivos.');
     if (!(Number(f.frioMax) > Number(f.frioMin))) e.push('El máximo de temperatura debe ser mayor que el mínimo.');
     const ubic = f.ubicaciones.split(',').map((s) => s.trim()).filter(Boolean);
-    if (!ubic.length) e.push('Defina al menos una ubicación.');
+    if (!ubic.length) e.push('Defina al menos una bodega.');
+    const enUso = new Set([...db.movimientos.flatMap((m) => [m.bodega, m.bodegaDestino, ...m.lineas.map((l) => l.bodega)]), ...db.usuarios.map((u) => u.bodega)].filter(Boolean));
+    const quitadas = cfg.ubicaciones.filter((b) => !ubic.includes(b) && enUso.has(b));
+    if (quitadas.length) e.push('No se puede quitar ' + quitadas.join(', ') + ': tiene movimientos o usuarios asignados.');
+    if (ubic[0] !== cfg.ubicaciones[0] && db.movimientos.some((m) => !m.bodega)) e.push('La primera bodega es la principal y no se puede cambiar de posición.');
+    if (!(Number(f.consumoDias) > 0)) e.push('Los días de consumo para el reabastecimiento deben ser mayores que cero.');
     if (movsAnio && f.metodoActual !== C.metodoDe(cfg, hoy)) e.push('El año ' + year + ' ya tiene movimientos: el método debe ser uniforme todo el año. Programe el cambio para ' + (year + 1) + '.');
     if (e.length) return setErr(e);
     commit((d) => {
@@ -39,6 +45,7 @@ export default function Configuracion() {
       d.config.limiteFaltantes = Number(f.limiteFaltantes) || 0;
       d.config.frio = { min: Number(f.frioMin), max: Number(f.frioMax) };
       d.config.ubicaciones = ubic;
+      d.config.reabastecimiento = { consumoDias: Number(f.consumoDias), seguridadDias: Number(f.seguridadDias) || 0, coberturaDias: Number(f.coberturaDias) || 0 };
       d.config.metodos = Object.assign({}, d.config.metodos);
       // Los años anteriores con movimientos conservan el método con el que se valoraron.
       const anios = new Set(d.movimientos.map((m) => C.yearOf(m.fecha)));
@@ -68,6 +75,7 @@ export default function Configuracion() {
     if (confirmar === 'vacio') {
       const v = C.dbVacia();
       v.config = Object.assign(v.config, { empresa: db.config.empresa, usuario: db.config.usuario });
+      v.usuarios = db.usuarios;
       reemplazar(v, 'Base reiniciada en blanco');
       toast('Base en blanco lista');
     }
@@ -88,7 +96,11 @@ export default function Configuracion() {
               <option value="3">Grupo 3 · Microempresas (contabilidad simplificada)</option>
             </select>
           </Field>
-          <Field label="Usuario actual" hint="Queda en cada documento y en la auditoría"><input className="input" value={f.usuario} onChange={set('usuario')} /></Field>
+          {db.usuarios.length ? (
+            <Field label="Usuarios" hint="Cada documento queda con el usuario que ingresó"><Btn onClick={() => go('usuarios')}>Administrar usuarios y roles</Btn></Field>
+          ) : (
+            <Field label="Nombre del usuario" hint="Mientras no cree usuarios, este nombre queda en documentos y auditoría"><input className="input" value={f.usuario} onChange={set('usuario')} /></Field>
+          )}
         </div>
         <div className="section-title">Método de valoración (ET art. 65)</div>
         <div className="form-grid">
@@ -111,7 +123,13 @@ export default function Configuracion() {
           <Field label="Límite de faltantes (%)" hint="ET art. 64"><input className="input" type="number" min="0" step="0.1" value={f.limiteFaltantes} onChange={set('limiteFaltantes')} /></Field>
           <Field label="Cadena de frío mínimo (°C)"><input className="input" type="number" step="0.1" value={f.frioMin} onChange={set('frioMin')} /></Field>
           <Field label="Cadena de frío máximo (°C)"><input className="input" type="number" step="0.1" value={f.frioMax} onChange={set('frioMax')} /></Field>
-          <Field label="Ubicaciones" full hint="Separadas por coma"><input className="input" value={f.ubicaciones} onChange={set('ubicaciones')} /></Field>
+          <Field label="Bodegas" full hint="Separadas por coma. La primera es la bodega principal. Incluya consultorios y neveras si guardan existencias."><input className="input" value={f.ubicaciones} onChange={set('ubicaciones')} /></Field>
+        </div>
+        <div className="section-title">Reabastecimiento</div>
+        <div className="form-grid">
+          <Field label="Días para promediar el consumo"><input className="input" type="number" min="1" value={f.consumoDias} onChange={set('consumoDias')} /></Field>
+          <Field label="Días de stock de seguridad"><input className="input" type="number" min="0" value={f.seguridadDias} onChange={set('seguridadDias')} /></Field>
+          <Field label="Días de cobertura por pedido"><input className="input" type="number" min="0" value={f.coberturaDias} onChange={set('coberturaDias')} /></Field>
         </div>
       </Panel>
 
@@ -142,7 +160,7 @@ export default function Configuracion() {
       {confirmar && (
         <Modal open title="Confirmar" icon={RotateCcw} onClose={() => setConfirmar(null)}
           footer={<><Btn onClick={() => setConfirmar(null)}>Cancelar</Btn><Btn variant="danger" onClick={ejecutar}>Sí, reemplazar los datos</Btn></>}>
-          <p>{confirmar === 'demo' ? 'Se reemplazarán todos los datos de este navegador por la demostración.' : 'Se borrarán productos, proveedores y movimientos de este navegador. La configuración de la empresa se conserva.'}</p>
+          <p>{confirmar === 'demo' ? 'Se reemplazarán todos los datos de este navegador por la demostración.' : 'Se borrarán productos, proveedores, kits, órdenes y movimientos de este navegador. La empresa y los usuarios se conservan.'}</p>
           <p className="muted">Descargue un respaldo antes si necesita conservar la información.</p>
         </Modal>
       )}

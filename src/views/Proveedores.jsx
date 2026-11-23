@@ -44,14 +44,14 @@ export function FormProveedor({ inicial, onClose, onGuardado }) {
 }
 
 export default function Proveedores() {
-  const { db, state } = useStore();
+  const { db, state, puede } = useStore();
   const [q, setQ] = useState('');
   const [editar, setEditar] = useState(null);
   const lista = db.proveedores.filter((p) => (p.nombre + ' ' + p.nit).toLowerCase().includes(q.toLowerCase()));
   const compras = (id) => db.movimientos.filter((m) => !m.anulado && m.tipo === 'entrada' && m.proveedorId === id)
     .reduce((s, m) => s + (state.movCost[m.id]?.total || 0), 0);
   return (
-    <Panel title="Proveedores" icon={Truck} actions={<Btn variant="primary" icon={Plus} onClick={() => setEditar({})}>Nuevo proveedor</Btn>}>
+    <Panel title="Proveedores" icon={Truck} actions={puede('maestros') && <Btn variant="primary" icon={Plus} onClick={() => setEditar({})}>Nuevo proveedor</Btn>}>
       <div className="toolbar"><SearchBox value={q} onChange={setQ} placeholder="Buscar por nombre o NIT" /></div>
       {lista.length ? (
         <div className="tbl-wrap">
@@ -65,7 +65,7 @@ export default function Proveedores() {
                   <td>{p.contacto}<div className="small muted">{[p.telefono, p.correo].filter(Boolean).join(' · ')}</div></td>
                   <td>{p.obligadoFacturar ? <Chip tone="cyan">Factura electrónica</Chip> : <Chip tone="violet">Documento soporte</Chip>}</td>
                   <td className="num">{new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(compras(p.id))}</td>
-                  <td className="acts"><Btn variant="ghost" size="sm" icon={Pencil} onClick={() => setEditar(p)} title="Editar" /></td>
+                  <td className="acts">{puede('maestros') && <Btn variant="ghost" size="sm" icon={Pencil} onClick={() => setEditar(p)} title="Editar" />}</td>
                 </tr>
               ))}
             </tbody>

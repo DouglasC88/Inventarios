@@ -7,7 +7,7 @@ import { money, num, fecha, INVIMA } from '../format.js';
 const VACIO = {
   codigo: '', nombre: '', categoria: 'dispositivo', unidad: 'unidad', stockMin: 0, ubicacion: '',
   fabricante: '', gtin: '', requiereInvima: true, invima: '', invimaVence: '', riesgo: 'I',
-  cadenaFrio: false, vnrUnit: '', activo: true
+  cadenaFrio: false, vnrUnit: '', activo: true, unidadCompra: '', factorCompra: 1, leadTime: 7, proveedorId: ''
 };
 
 export function FormProducto({ inicial, onClose }) {
@@ -31,8 +31,10 @@ export function FormProducto({ inicial, onClose }) {
     if (Number(f.stockMin) < 0) e.push('El stock mínimo no puede ser negativo.');
     if (f.invimaVence && !C.isISODate(f.invimaVence)) e.push('La fecha de vencimiento del registro no es válida.');
     if (f.vnrUnit !== '' && Number(f.vnrUnit) < 0) e.push('El valor neto realizable no puede ser negativo.');
+    if (!(Number(f.factorCompra) >= 1)) e.push('El factor de la unidad de compra debe ser 1 o mayor.');
+    if (Number(f.leadTime) < 0) e.push('Los días de entrega no pueden ser negativos.');
     if (e.length) return setErr(e);
-    const p = Object.assign({}, f, { codigo: f.codigo.trim(), nombre: f.nombre.trim(), stockMin: Number(f.stockMin) || 0, vnrUnit: f.vnrUnit === '' ? '' : Number(f.vnrUnit) });
+    const p = Object.assign({}, f, { codigo: f.codigo.trim(), nombre: f.nombre.trim(), stockMin: Number(f.stockMin) || 0, factorCompra: Number(f.factorCompra) || 1, leadTime: Number(f.leadTime) || 0, vnrUnit: f.vnrUnit === '' ? '' : Number(f.vnrUnit) });
     const nuevo = !p.id;
     if (nuevo) p.id = C.nuevoId();
     commit((d) => {
@@ -57,13 +59,24 @@ export function FormProducto({ inicial, onClose }) {
         </Field>
         <Field label="Unidad de medida"><input className="input" value={f.unidad} onChange={set('unidad')} /></Field>
         <Field label="Stock mínimo" hint="Según frecuencia de uso y esterilización (Res. 3100)"><input className="input" type="number" min="0" value={f.stockMin} onChange={set('stockMin')} /></Field>
-        <Field label="Ubicación">
+        <Field label="Bodega habitual">
           <select className="select input" value={f.ubicacion} onChange={set('ubicacion')}>
             {db.config.ubicaciones.map((u) => <option key={u}>{u}</option>)}
           </select>
         </Field>
         <Field label="Fabricante"><input className="input" value={f.fabricante} onChange={set('fabricante')} /></Field>
         <Field label="GTIN / código de barras" hint="Permite leer el código GS1 / UDI al recibir"><input className="input mono" value={f.gtin} onChange={set('gtin')} /></Field>
+      </div>
+      <div className="section-title">Compras y reabastecimiento</div>
+      <div className="form-grid">
+        <Field label="Unidad de compra" hint="Ej.: caja x50. Vacío si se compra igual que se consume"><input className="input" value={f.unidadCompra} onChange={set('unidadCompra')} /></Field>
+        <Field label="Unidades de consumo por unidad de compra"><input className="input" type="number" min="1" value={f.factorCompra} onChange={set('factorCompra')} /></Field>
+        <Field label="Proveedor preferido">
+          <select className="select input" value={f.proveedorId} onChange={set('proveedorId')}>
+            <option value="">Sin proveedor</option>{db.proveedores.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+          </select>
+        </Field>
+        <Field label="Días de entrega del proveedor" hint="Para calcular el punto de reorden"><input className="input" type="number" min="0" value={f.leadTime} onChange={set('leadTime')} /></Field>
       </div>
       <div className="section-title">Información sanitaria</div>
       <div className="form-grid">
@@ -95,7 +108,7 @@ export function FormProducto({ inicial, onClose }) {
 }
 
 export default function Productos() {
-  const { db, state, hoy, go } = useStore();
+  const { db, state, hoy, go, puede } = useStore();
   const [q, setQ] = useState('');
   const [cat, setCat] = useState('todas');
   const [editar, setEditar] = useState(null);
@@ -105,7 +118,7 @@ export default function Productos() {
 
   return (
     <Panel title="Maestro de productos" icon={Boxes}
-      actions={<Btn variant="primary" icon={Plus} onClick={() => setEditar({})}>Nuevo producto</Btn>}>
+      actions={puede('maestros') && <Btn variant="primary" icon={Plus} onClick={() => setEditar({})}>Nuevo producto</Btn>}>
       <div className="toolbar">
         <SearchBox value={q} onChange={setQ} placeholder="Buscar por nombre, código o INVIMA" />
         <Tabs value={cat} onChange={setCat} options={[['todas', 'Todas'], ...Object.entries(C.CATEGORIAS)]} />
@@ -127,7 +140,8 @@ export default function Productos() {
                     <td className="mono">{p.codigo}</td>
                     <td>
                       <div className="strong">{p.nombre} {p.cadenaFrio && <Snowflake size={13} className="cyan-t" />}</div>
-                      <div className="small muted">{p.ubicacion} · mín. {num(p.stockMin)} {p.unidad}</div>
+                      <div className="small muted">mín. {num(p.stockMin)} {p.unidad}{p.unidadCompra ? ' · compra: ' + p.unidadCompra : ''}</div>
+                      <div className="stockbod">{Object.entries(C.existenciasPorBodega(db, state, p.id)).filter(([, v]) => v > 0).map(([b, v]) => <span key={b}>{b}: {num(v)}</span>)}</div>
                     </td>
                     <td>{C.CATEGORIAS[p.categoria]}</td>
                     <td className={'num' + (bajo ? ' red-t' : '')}>{num(qty)} <span className="muted small">{p.unidad}</span></td>
@@ -137,7 +151,7 @@ export default function Productos() {
                     <td>{p.riesgo}</td>
                     <td className="acts">
                       <Btn variant="ghost" size="sm" icon={ScrollText} onClick={() => go('kardex', p.id)} title="Ver kardex" />
-                      <Btn variant="ghost" size="sm" icon={Pencil} onClick={() => setEditar(p)} title="Editar" />
+                      {puede('maestros') && <Btn variant="ghost" size="sm" icon={Pencil} onClick={() => setEditar(p)} title="Editar" />}
                     </td>
                   </tr>
                 );

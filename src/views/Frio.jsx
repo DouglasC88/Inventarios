@@ -37,7 +37,7 @@ function NuevaLectura({ onClose }) {
 }
 
 export default function Frio() {
-  const { db, hoy } = useStore();
+  const { db, hoy, puede } = useStore();
   const [nueva, setNueva] = useState(false);
   const lista = db.temperaturas.slice().sort((a, b) => (a.fecha < b.fecha ? 1 : -1));
   const ult30 = lista.filter((t) => t.fecha.slice(0, 10) >= C.addDays(hoy, -30));
@@ -56,7 +56,7 @@ export default function Frio() {
         <Kpi label="Fuera de rango" value={fuera.length} sub="Requieren evaluación" tone={fuera.length ? 'magenta' : 'green'} />
       </div>
       <Panel title="Cadena de frío" icon={Thermometer} sub="Registro de temperaturas. Si se rompe la cadena de frío, el prestador notifica al INVIMA (Res. 3100 de 2019)."
-        actions={<Btn variant="primary" icon={Plus} onClick={() => setNueva(true)}>Registrar lectura</Btn>}>
+        actions={puede('frio') && <Btn variant="primary" icon={Plus} onClick={() => setNueva(true)}>Registrar lectura</Btn>}>
         {temps.length > 1 && (
           <div className="tbl-wrap" style={{ padding: 12, marginBottom: 14 }}>
             <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label="Temperaturas de los últimos 30 días">

@@ -3,14 +3,20 @@ import * as C from './core/core.js';
 import { crearDemo } from './core/demo.js';
 
 const KEY = 'nova-inventario:db:v1';
+const KEY_SESION = 'nova-inventario:sesion';
 const Ctx = createContext(null);
 
 function normalizar(d) {
   const base = C.dbVacia();
   const db = Object.assign(base, d);
+  ['productos', 'proveedores', 'movimientos', 'conteos', 'cierres', 'temperaturas', 'auditoria', 'ordenes', 'requisiciones', 'kits', 'usuarios']
+    .forEach((k) => { if (!Array.isArray(db[k])) db[k] = []; });
   db.config = Object.assign(C.configBase(), d.config || {});
   db.config.empresa = Object.assign(C.configBase().empresa, (d.config || {}).empresa || {});
+  db.config.reabastecimiento = Object.assign(C.configBase().reabastecimiento, (d.config || {}).reabastecimiento || {});
   db.seq = Object.assign(base.seq, d.seq || {});
+  const bp = C.bodegaPrincipal(db.config);
+  db.conteos.forEach((c) => c.lineas.forEach((l) => { if (!l.bodega) l.bodega = bp; }));
   return db;
 }
 
@@ -31,12 +37,20 @@ function leerRuta() {
   return { vista: vista || 'panel', arg: resto.join('/') ? decodeURIComponent(resto.join('/')) : '' };
 }
 
+function leerSesion() {
+  try { return sessionStorage.getItem(KEY_SESION) || ''; } catch { return ''; }
+}
+
 export function StoreProvider({ children }) {
   const [db, setDb] = useState(cargar);
   const [toasts, setToasts] = useState([]);
   const [ruta, setRuta] = useState(leerRuta);
+  const [sesionId, setSesionId] = useState(leerSesion);
   const hoy = C.todayISO();
   const state = useMemo(() => C.replay(db), [db]);
+  const usuario = db.usuarios.length ? db.usuarios.find((u) => u.id === sesionId && u.activo !== false) || null : null;
+  const requiereLogin = db.usuarios.some((u) => u.activo !== false) && !usuario;
+  const nombreUsuario = usuario ? usuario.nombre : db.config.usuario || 'Usuario';
 
   useEffect(() => {
     try { localStorage.setItem(KEY, JSON.stringify(db)); } catch { /* sin almacenamiento */ }
@@ -59,23 +73,39 @@ export function StoreProvider({ children }) {
     setDb((prev) => {
       const next = structuredClone(prev);
       mutar(next);
-      next.auditoria.unshift({ ts: new Date().toISOString(), usuario: next.config.usuario || 'Usuario', accion, detalle: detalle || '' });
-      if (next.auditoria.length > 1500) next.auditoria.length = 1500;
+      next.auditoria.unshift({ ts: new Date().toISOString(), usuario: nombreUsuario, accion, detalle: detalle || '' });
+      if (next.auditoria.length > 2000) next.auditoria.length = 2000;
       return next;
     });
-  }, []);
+  }, [nombreUsuario]);
 
   const reemplazar = useCallback((nueva, accion) => {
     const n = normalizar(nueva);
-    n.auditoria.unshift({ ts: new Date().toISOString(), usuario: n.config.usuario || 'Usuario', accion, detalle: '' });
+    n.auditoria.unshift({ ts: new Date().toISOString(), usuario: nombreUsuario, accion, detalle: '' });
     setDb(n);
-  }, []);
+  }, [nombreUsuario]);
 
   const go = useCallback((vista, arg) => {
     window.location.hash = '#/' + vista + (arg ? '/' + encodeURIComponent(arg) : '');
   }, []);
 
-  const value = { db, state, hoy, commit, reemplazar, toast, toasts, ruta, go };
+  const ingresar = useCallback((u) => {
+    try { sessionStorage.setItem(KEY_SESION, u.id); } catch { /* sin almacenamiento */ }
+    setSesionId(u.id);
+    setDb((prev) => {
+      const next = structuredClone(prev);
+      next.auditoria.unshift({ ts: new Date().toISOString(), usuario: u.nombre, accion: 'Inicio de sesión', detalle: C.ROLES[u.rol] });
+      return next;
+    });
+  }, []);
+  const salir = useCallback(() => {
+    try { sessionStorage.removeItem(KEY_SESION); } catch { /* sin almacenamiento */ }
+    setSesionId('');
+  }, []);
+
+  const puede = useCallback((accion) => C.puede(usuario, accion), [usuario]);
+
+  const value = { db, state, hoy, commit, reemplazar, toast, toasts, ruta, go, usuario, nombreUsuario, requiereLogin, ingresar, salir, puede };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 

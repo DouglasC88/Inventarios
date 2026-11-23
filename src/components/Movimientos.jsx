@@ -1,24 +1,26 @@
 import { useState } from 'react';
-import { Ban, Eye, FileText } from 'lucide-react';
+import { Ban, Eye, FileText, Printer } from 'lucide-react';
 import { useStore, C } from '../store.jsx';
 import { Btn, Chip, Empty, Errores, Field, Modal, SearchBox } from './ui.jsx';
+import { imprimirMovimiento } from './imprimir.js';
 import { money, money2, num, fecha, fechaHora, TONO_MOV } from '../format.js';
 
 /** Valida y registra un movimiento. Devuelve la lista de errores (vacía si se registró). */
 export function useRegistrar() {
-  const { db, hoy, commit, toast } = useStore();
-  return (mov, accion) => {
-    const m = Object.assign({ id: C.nuevoId(), creado: new Date().toISOString(), usuario: db.config.usuario }, mov);
+  const { db, hoy, commit, toast, nombreUsuario } = useStore();
+  return (mov, accion, extra) => {
+    const m = Object.assign({ id: C.nuevoId(), creado: new Date().toISOString(), usuario: nombreUsuario }, mov);
+    if (!m.bodega) m.bodega = C.bodegaPrincipal(db.config);
     const e = C.validarMovimiento(db, m, hoy);
     if (e.length) return e;
-    const pref = { entrada: 'EN', salida: 'SA', ajuste: 'AJ', baja: 'BA' }[m.tipo];
-    const numero = pref + '-' + String((db.seq[pref] || 0) + 1).padStart(5, '0');
+    const numero = C.verNumero(db, m.tipo);
     commit((d) => {
       d.movimientos.push(Object.assign({}, m, { num: C.siguienteNumero(d, m.tipo), orden: C.siguienteOrden(d) }));
       if (m.conteoId) {
         const c = d.conteos.find((x) => x.id === m.conteoId);
         if (c) { c.estado = 'aplicado'; c.ajusteNum = numero; c.aplicado = new Date().toISOString(); }
       }
+      if (extra) extra(d, numero);
     }, (accion || C.TIPOS_MOV[m.tipo] + ' registrada'), numero);
     toast(numero + ' registrado');
     return [];
@@ -30,13 +32,44 @@ export function nombreProducto(db, id) {
   return p ? p.nombre : 'Producto eliminado';
 }
 
+export function SelectBodega({ value, onChange, soloPropia, incluirTodas, excluir }) {
+  const { db, usuario } = useStore();
+  let lista = db.config.ubicaciones;
+  if (soloPropia && usuario && usuario.rol === 'consultorio' && usuario.bodega) lista = [usuario.bodega];
+  if (excluir) lista = lista.filter((b) => b !== excluir);
+  return (
+    <select className="select input" value={value} onChange={(e) => onChange(e.target.value)}>
+      {incluirTodas && <option value="todas">Todas las bodegas</option>}
+      {!incluirTodas && !lista.includes(value) && <option value="">Seleccione…</option>}
+      {lista.map((b) => <option key={b} value={b}>{b}</option>)}
+    </select>
+  );
+}
+
+export function encabezadoMov(db, mov, costos) {
+  const prov = db.proveedores.find((p) => p.id === mov.proveedorId);
+  const kv = [['Documento', mov.num], ['Fecha', fecha(mov.fecha)], ['Tipo', C.TIPOS_MOV[mov.tipo]], ['Valor', money(costos ? costos.total : 0)]];
+  if (mov.tipo === 'traslado') kv.push(['Origen', C.bodegaDe(mov, db.config)], ['Destino', mov.bodegaDestino]);
+  else kv.push(['Bodega', C.bodegaDe(mov, db.config)]);
+  if (mov.tipo === 'entrada') kv.push(['Proveedor', prov ? prov.nombre : '—'], ['NIT', prov ? prov.nit : '—'], ['Soporte', mov.docTipo + ' ' + mov.docNum], ['Costos adicionales', money(mov.costosAdic || 0)]);
+  if (mov.ordenNum) kv.push(['Orden de compra', mov.ordenNum]);
+  if (mov.tipo === 'devolucion') kv.push(['Proveedor', prov ? prov.nombre : '—'], ['Causa', C.CAUSAS_DEVOLUCION[mov.causa]], ['Documento', mov.docNum]);
+  if (mov.tipo === 'salida') kv.push(['Destino', (mov.destinoTipo || '') + ' ' + (mov.destino || '')], ['Procedimiento', mov.procedimiento || '—'], ['Responsable', mov.responsable || '—']);
+  if (mov.tipo === 'baja') kv.push(['Causa', C.CAUSAS_BAJA[mov.causa]], ['Acta', mov.acta], ['Autoriza', mov.autoriza]);
+  if (mov.tipo === 'ajuste' || mov.tipo === 'inicial') kv.push(['Acta / soporte', mov.acta], ['Autoriza', mov.autoriza || '—']);
+  if (mov.requisicionNum) kv.push(['Requisición', mov.requisicionNum]);
+  if (mov.conteoNum) kv.push(['Conteo', mov.conteoNum]);
+  if (mov.responsable && mov.tipo !== 'salida') kv.push(['Responsable', mov.responsable]);
+  kv.push(['Registrado por', mov.usuario || '—'], ['Registrado', fechaHora(mov.creado)]);
+  return kv;
+}
+
 export function MovDetalle({ mov, onClose }) {
-  const { db, state, commit, toast } = useStore();
+  const { db, state, commit, toast, puede, nombreUsuario } = useStore();
   const [anular, setAnular] = useState(false);
   const [motivo, setMotivo] = useState('');
   const [err, setErr] = useState([]);
   const costos = state.movCost[mov.id];
-  const prov = db.proveedores.find((p) => p.id === mov.proveedorId);
 
   const confirmarAnulacion = () => {
     const e = C.validarAnulacion(db, mov);
@@ -45,36 +78,32 @@ export function MovDetalle({ mov, onClose }) {
     commit((d) => {
       const m = d.movimientos.find((x) => x.id === mov.id);
       m.anulado = true;
-      m.anulacion = { motivo: motivo.trim(), fecha: new Date().toISOString(), usuario: d.config.usuario };
+      m.anulacion = { motivo: motivo.trim(), fecha: new Date().toISOString(), usuario: nombreUsuario };
     }, 'Movimiento anulado', mov.num + ' · ' + motivo.trim());
     toast(mov.num + ' anulado');
     onClose();
   };
 
-  const kv = [
-    ['Documento', mov.num], ['Fecha', fecha(mov.fecha)], ['Tipo', C.TIPOS_MOV[mov.tipo]],
-    ['Valor', money(costos ? costos.total : 0)]
-  ];
-  if (mov.tipo === 'entrada') kv.push(['Proveedor', prov ? prov.nombre : '—'], ['Soporte', mov.docTipo + ' ' + mov.docNum], ['Costos adicionales', money(mov.costosAdic || 0)]);
-  if (mov.tipo === 'salida') kv.push(['Destino', (mov.destinoTipo || '') + ' ' + (mov.destino || '')], ['Responsable', mov.responsable || '—']);
-  if (mov.tipo === 'baja') kv.push(['Causa', C.CAUSAS_BAJA[mov.causa]], ['Acta', mov.acta], ['Autoriza', mov.autoriza]);
-  if (mov.tipo === 'ajuste') kv.push(['Acta / soporte', mov.acta], ['Autoriza', mov.autoriza || '—']);
-  if (mov.conteoNum) kv.push(['Conteo', mov.conteoNum]);
-  kv.push(['Registrado por', mov.usuario || '—'], ['Registrado', fechaHora(mov.creado)]);
-
+  const kv = encabezadoMov(db, mov, costos);
   return (
     <Modal open wide title={'Documento ' + mov.num} icon={FileText} onClose={onClose}
-      footer={!mov.anulado && !anular ? <><Btn onClick={onClose}>Cerrar</Btn><Btn variant="danger" icon={Ban} onClick={() => setAnular(true)}>Anular</Btn></> : <Btn onClick={onClose}>Cerrar</Btn>}>
+      footer={<>
+        <Btn icon={Printer} onClick={() => imprimirMovimiento(db, mov, costos)}>Imprimir</Btn>
+        <span style={{ flex: 1 }} />
+        <Btn onClick={onClose}>Cerrar</Btn>
+        {!mov.anulado && !anular && puede('anular') && <Btn variant="danger" icon={Ban} onClick={() => setAnular(true)}>Anular</Btn>}
+      </>}>
       {mov.anulado && <Errores lista={['Anulado el ' + fechaHora(mov.anulacion?.fecha) + ' por ' + (mov.anulacion?.usuario || '—') + ': ' + (mov.anulacion?.motivo || '')]} />}
-      <div className="kv">{kv.map(([k, v]) => <div key={k}><span>{k}</span><b>{v}</b></div>)}</div>
+      <div className="kv">{kv.map(([k, v], i) => <div key={k + i}><span>{k}</span><b>{v}</b></div>)}</div>
       {mov.nota && <p className="muted">Nota: {mov.nota}</p>}
       <div className="tbl-wrap">
         <table className="tbl">
-          <thead><tr><th>Producto</th><th>Lote</th><th>Vence</th>{mov.tipo === 'ajuste' && <th>Causa</th>}<th className="num">Cantidad</th><th className="num">Costo unit.</th><th className="num">Valor</th></tr></thead>
+          <thead><tr><th>Producto</th>{mov.lineas.some((l) => l.bodega) && <th>Bodega</th>}<th>Lote</th><th>Vence</th>{mov.tipo === 'ajuste' && <th>Causa</th>}<th className="num">Cantidad</th><th className="num">Costo unit.</th><th className="num">Valor</th></tr></thead>
           <tbody>
             {mov.lineas.map((l, i) => (
               <tr key={i}>
                 <td>{nombreProducto(db, l.productoId)}</td>
+                {mov.lineas.some((x) => x.bodega) && <td>{l.bodega || C.bodegaDe(mov, db.config)}</td>}
                 <td className="mono">{l.lote}</td>
                 <td>{fecha(l.vence)}</td>
                 {mov.tipo === 'ajuste' && <td>{C.CAUSAS_AJUSTE[l.causa]}</td>}
@@ -102,28 +131,30 @@ export function MovDetalle({ mov, onClose }) {
   );
 }
 
-export function MovTabla({ tipos, vacio }) {
+export function MovTabla({ tipos, vacio, filtro }) {
   const { db, state } = useStore();
   const [q, setQ] = useState('');
   const [ver, setVer] = useState(null);
-  const lista = C.ordenar(db.movimientos).reverse().filter((m) => tipos.includes(m.tipo)).filter((m) => {
+  const lista = C.ordenar(db.movimientos).reverse().filter((m) => tipos.includes(m.tipo) && (!filtro || filtro(m))).filter((m) => {
     if (!q) return true;
     const prov = db.proveedores.find((p) => p.id === m.proveedorId);
-    const txt = [m.num, m.docNum, m.destino, m.acta, prov && prov.nombre, ...m.lineas.map((l) => l.lote + ' ' + nombreProducto(db, l.productoId))].join(' ');
+    const txt = [m.num, m.docNum, m.destino, m.acta, m.bodega, m.bodegaDestino, m.procedimiento, m.ordenNum, prov && prov.nombre, ...m.lineas.map((l) => l.lote + ' ' + nombreProducto(db, l.productoId))].join(' ');
     return txt.toLowerCase().includes(q.toLowerCase());
   });
   const detalle = (m) => {
-    if (m.tipo === 'entrada') {
-      const prov = db.proveedores.find((p) => p.id === m.proveedorId);
-      return <>{prov ? prov.nombre : '—'}<div className="small muted mono">{m.docTipo} {m.docNum}</div></>;
-    }
-    if (m.tipo === 'salida') return <>{m.destinoTipo}: {m.destino}<div className="small muted">{m.responsable}</div></>;
+    const prov = db.proveedores.find((p) => p.id === m.proveedorId);
+    const b = C.bodegaDe(m, db.config);
+    if (m.tipo === 'entrada') return <>{prov ? prov.nombre : '—'}<div className="small muted mono">{m.docTipo} {m.docNum}{m.ordenNum ? ' · ' + m.ordenNum : ''} · {b}</div></>;
+    if (m.tipo === 'inicial') return <>Saldo inicial<div className="small muted">{m.acta} · {b}</div></>;
+    if (m.tipo === 'salida') return <>{m.destinoTipo}: {m.destino}{m.procedimiento ? ' · ' + m.procedimiento : ''}<div className="small muted">{b} · {m.responsable}</div></>;
+    if (m.tipo === 'traslado') return <>{b} → {m.bodegaDestino}<div className="small muted">{m.requisicionNum || m.responsable || ''}</div></>;
+    if (m.tipo === 'devolucion') return <>{prov ? prov.nombre : '—'}<div className="small muted">{C.CAUSAS_DEVOLUCION[m.causa]} · {m.docNum}</div></>;
     if (m.tipo === 'baja') return <>{C.CAUSAS_BAJA[m.causa]}<div className="small muted">Acta {m.acta}</div></>;
     return <>{[...new Set(m.lineas.map((l) => C.CAUSAS_AJUSTE[l.causa]))].join(', ')}<div className="small muted">Acta {m.acta}{m.conteoNum ? ' · ' + m.conteoNum : ''}</div></>;
   };
   return (
     <>
-      <div className="toolbar"><SearchBox value={q} onChange={setQ} placeholder="Buscar documento, lote, producto…" /></div>
+      <div className="toolbar"><SearchBox value={q} onChange={setQ} placeholder="Buscar documento, lote, producto, bodega…" /></div>
       {lista.length ? (
         <div className="tbl-wrap">
           <table className="tbl">
@@ -158,4 +189,39 @@ export function SelectProducto({ value, onChange, autoFocus }) {
       {lista.map((p) => <option key={p.id} value={p.id}>{p.codigo} · {p.nombre}</option>)}
     </select>
   );
+}
+
+/** Tabla de lotes asignados por FEFO. */
+export function TablaFEFO({ asignaciones }) {
+  const { db, hoy } = useStore();
+  if (!asignaciones.length) return null;
+  const SEM = { vencido: ['magenta', 'Vencido'], rojo: ['red', 'Rojo'], amarillo: ['amber', 'Amarillo'], verde: ['green', 'Verde'], na: ['muted', 'Sin fecha'] };
+  return (
+    <div className="tbl-wrap">
+      <table className="tbl">
+        <thead><tr><th>Producto</th><th>Bodega</th><th>Lote</th><th>Vence</th><th>Semáforo</th><th className="num">Cantidad</th></tr></thead>
+        <tbody>
+          {asignaciones.flatMap((a) => [
+            ...a.asignacion.map((x, j) => {
+              const s = SEM[C.semaforo(x.vence, hoy, db.config)];
+              return (
+                <tr key={a.productoId + j}>
+                  <td>{nombreProducto(db, a.productoId)}</td><td>{x.bodega}</td><td className="mono">{x.lote}</td><td>{fecha(x.vence)}</td>
+                  <td><Chip tone={s[0]} dot>{s[1]}</Chip></td><td className="num">{num(x.cantidad)}</td>
+                </tr>
+              );
+            }),
+            a.faltante > 0 && <tr key={a.productoId + 'f'}><td>{nombreProducto(db, a.productoId)}</td><td colSpan={4} className="red-t">Sin existencia suficiente sin vencer en la bodega</td><td className="num red-t">{num(a.faltante)}</td></tr>
+          ])}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/** Agrupa cantidades por producto y asigna lotes por FEFO en una bodega. */
+export function asignarFEFO(state, lineas, hoy, bodega) {
+  const totales = {};
+  lineas.forEach((l) => { if (l.productoId && Number(l.cantidad) > 0) totales[l.productoId] = (totales[l.productoId] || 0) + Number(l.cantidad); });
+  return Object.entries(totales).map(([id, q]) => Object.assign({ productoId: id, cantidad: q }, C.sugerirFEFO(state, id, q, hoy, bodega)));
 }

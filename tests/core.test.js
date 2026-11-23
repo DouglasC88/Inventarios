@@ -124,3 +124,104 @@ test('anular una entrada ya consumida no está permitido', () => {
   add(db, { tipo: 'salida', fecha: '2026-02-01', destino: 'X', lineas: [{ productoId: 'a', lote: 'L1', vence: '2027-01-01', cantidad: 2 }] });
   assert.ok(C.validarAnulacion(db, e1).length > 0);
 });
+
+test('traslado mueve existencias entre bodegas sin cambiar el valor', () => {
+  const db = base();
+  db.config.ubicaciones = ['Principal', 'Consultorio'];
+  add(db, ent('2026-01-10', [{ productoId: 'a', lote: 'L1', vence: '2027-01-01', cantidad: 10, costoUnit: 100 }]));
+  const t = { id: 't', tipo: 'traslado', fecha: '2026-02-01', bodega: 'Principal', bodegaDestino: 'Consultorio', lineas: [{ productoId: 'a', lote: 'L1', vence: '2027-01-01', cantidad: 4 }] };
+  assert.deepEqual(C.validarMovimiento(db, t, HOY), []);
+  add(db, t);
+  const st = C.replay(db);
+  assert.equal(C.existencia(st, 'a', 'Principal'), 6);
+  assert.equal(C.existencia(st, 'a', 'Consultorio'), 4);
+  assert.equal(st.prods.a.value, 1000);
+  // No se puede sacar del consultorio más de lo que tiene.
+  const e = C.validarMovimiento(db, { id: 's', tipo: 'salida', fecha: '2026-03-01', bodega: 'Consultorio', destino: 'HC-1', lineas: [{ productoId: 'a', lote: 'L1', vence: '2027-01-01', cantidad: 5 }] }, HOY);
+  assert.ok(e.some((x) => x.includes('Consultorio')));
+  const mismo = C.validarMovimiento(db, Object.assign({}, t, { id: 't2', bodegaDestino: 'Principal' }), HOY);
+  assert.ok(mismo.some((x) => x.includes('distintas')));
+});
+
+test('devolución a proveedor descuenta existencias y compras del año', () => {
+  const db = base();
+  add(db, ent('2026-01-10', [{ productoId: 'a', lote: 'L1', vence: '2027-01-01', cantidad: 10, costoUnit: 100 }]));
+  const dv = { id: 'd', tipo: 'devolucion', fecha: '2026-01-15', proveedorId: 'pv', causa: 'calidad', docNum: 'NC-1', lineas: [{ productoId: 'a', lote: 'L1', vence: '2027-01-01', cantidad: 2 }] };
+  assert.deepEqual(C.validarMovimiento(db, dv, HOY), []);
+  add(db, dv);
+  assert.equal(C.replay(db).prods.a.qty, 8);
+  assert.equal(C.faltantesAnio(db, 2026).compras, 800);
+});
+
+test('orden de compra: recepción parcial y total', () => {
+  const db = base();
+  db.ordenes.push({ id: 'o1', num: 'OC-1', proveedorId: 'pv', estado: 'abierta', lineas: [{ productoId: 'a', cantidad: 10, costoUnit: 5 }] });
+  assert.equal(C.estadoOrden(db, db.ordenes[0]).estado, 'abierta');
+  add(db, ent('2026-01-10', [{ productoId: 'a', lote: 'L1', vence: '2027-01-01', cantidad: 4, costoUnit: 5 }], { ordenId: 'o1' }));
+  let st = C.estadoOrden(db, db.ordenes[0]);
+  assert.equal(st.estado, 'parcial');
+  assert.equal(st.lineas[0].pendiente, 6);
+  assert.equal(C.pendienteEnOrdenes(db).a, 6);
+  add(db, ent('2026-01-12', [{ productoId: 'a', lote: 'L2', vence: '2027-01-01', cantidad: 6, costoUnit: 5 }], { ordenId: 'o1' }));
+  st = C.estadoOrden(db, db.ordenes[0]);
+  assert.equal(st.estado, 'recibida');
+});
+
+test('unidad de compra se convierte a unidad de consumo', () => {
+  const r = C.aUnidadBase({ factorCompra: 50 }, 2, 100000, true);
+  assert.equal(r.cantidad, 100);
+  assert.equal(r.costoUnit, 2000);
+});
+
+test('reabastecimiento sugiere comprar cuando se llega al punto de reorden', () => {
+  const db = base();
+  db.productos[0].leadTime = 10;
+  db.config.reabastecimiento = { consumoDias: 30, seguridadDias: 5, coberturaDias: 30 };
+  add(db, ent('2026-10-01', [{ productoId: 'a', lote: 'L1', vence: '2027-12-01', cantidad: 40, costoUnit: 1 }]));
+  add(db, { tipo: 'salida', fecha: '2026-11-10', destino: 'X', lineas: [{ productoId: 'a', lote: 'L1', vence: '2027-12-01', cantidad: 30 }] });
+  const r = C.reabastecimiento(db, C.replay(db), HOY)[0];
+  // consumo 1/día → punto de reorden 10 + 5 = 15; existencia 10 → comprar hasta 45
+  assert.equal(r.puntoReorden, 15);
+  assert.equal(r.sugerido, 35);
+});
+
+test('clasificación ABC por valor de consumo', () => {
+  const db = base();
+  db.productos.push({ id: 'b', codigo: 'B', nombre: 'B', categoria: 'insumo', unidad: 'u' });
+  add(db, ent('2026-10-01', [{ productoId: 'a', lote: 'L1', vence: '2027-12-01', cantidad: 100, costoUnit: 100 }, { productoId: 'b', lote: 'L2', vence: '2027-12-01', cantidad: 100, costoUnit: 1 }]));
+  add(db, { tipo: 'salida', fecha: '2026-11-10', destino: 'X', lineas: [{ productoId: 'a', lote: 'L1', vence: '2027-12-01', cantidad: 50 }, { productoId: 'b', lote: 'L2', vence: '2027-12-01', cantidad: 50 }] });
+  const r = C.analisisABC(db, C.replay(db), HOY);
+  assert.equal(r.filas[0].producto.id, 'a');
+  assert.equal(r.filas[0].clase, 'A');
+  assert.equal(r.filas[1].clase, 'C');
+});
+
+test('importación desde CSV con encabezados en español', () => {
+  const db = base();
+  const filas = C.parseCSV('Código;Descripción;Categoría;Unidad;Lote;Vencimiento;Cantidad;Costo unitario\nA;Guantes;Dispositivo médico;caja;L9;31/12/2027;5;"1.250,50"\nZ;Gasas;Insumo;paquete;G1;2027-06-30;10;800\n');
+  const r = C.interpretarImportacion(filas, db);
+  assert.deepEqual(r.errores, []);
+  assert.equal(r.productos.length, 2);
+  assert.ok(r.productos.find((p) => p.codigo === 'A').existente);
+  assert.equal(r.saldos[0].vence, '2027-12-31');
+  assert.equal(r.saldos[0].costoUnit, 1250.5);
+});
+
+test('PIN cifrado y permisos por rol', () => {
+  assert.equal(C.sha256('abc'), 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+  assert.notEqual(C.hashPin('admin', '1234'), C.hashPin('admin', '1235'));
+  assert.ok(C.puede({ rol: 'admin' }, 'config'));
+  assert.ok(!C.puede({ rol: 'consultorio' }, 'ajustes'));
+  assert.ok(C.puede({ rol: 'consultorio' }, 'salidas'));
+  assert.ok(!C.puede({ rol: 'consulta' }, 'entradas'));
+});
+
+test('requisición queda atendida cuando el traslado cubre lo pedido', () => {
+  const db = base();
+  db.config.ubicaciones = ['Principal', 'C1'];
+  add(db, ent('2026-01-10', [{ productoId: 'a', lote: 'L1', vence: '2027-01-01', cantidad: 10, costoUnit: 1 }]));
+  db.requisiciones.push({ id: 'r1', num: 'RQ-1', bodegaSolicita: 'C1', estado: 'pendiente', lineas: [{ productoId: 'a', cantidad: 3 }] });
+  assert.equal(C.estadoRequisicion(db, db.requisiciones[0]).estado, 'pendiente');
+  add(db, { tipo: 'traslado', fecha: '2026-02-01', bodega: 'Principal', bodegaDestino: 'C1', requisicionId: 'r1', lineas: [{ productoId: 'a', lote: 'L1', vence: '2027-01-01', cantidad: 3 }] });
+  assert.equal(C.estadoRequisicion(db, db.requisiciones[0]).estado, 'atendida');
+});

@@ -2,26 +2,50 @@ import { useState } from 'react';
 import { PackagePlus, Plus, ScanBarcode, Trash2 } from 'lucide-react';
 import { useStore, C } from '../store.jsx';
 import { Btn, Errores, Field, Modal, Nota, Panel } from '../components/ui.jsx';
-import { MovTabla, SelectProducto, useRegistrar } from '../components/Movimientos.jsx';
+import { MovTabla, SelectBodega, SelectProducto, useRegistrar } from '../components/Movimientos.jsx';
 import { FormProveedor } from './Proveedores.jsx';
-import { money } from '../format.js';
+import { money, num } from '../format.js';
 
-const lineaVacia = () => ({ productoId: '', lote: '', vence: '', cantidad: '', costoUnit: '' });
+const lineaVacia = () => ({ productoId: '', lote: '', vence: '', cantidad: '', costoUnit: '', enCompra: false });
 
-function NuevaEntrada({ onClose }) {
+export function SelectUnidad({ producto, value, onChange }) {
+  if (!producto || !(Number(producto.factorCompra) > 1)) return <span className="muted small">{producto ? producto.unidad : ''}</span>;
+  return (
+    <select className="select input" value={value ? '1' : '0'} onChange={(e) => onChange(e.target.value === '1')} style={{ width: 150 }}>
+      <option value="0">{producto.unidad}</option>
+      <option value="1">{producto.unidadCompra || 'empaque'} (×{producto.factorCompra})</option>
+    </select>
+  );
+}
+
+export function NuevaEntrada({ onClose, ordenInicial }) {
   const { db, hoy, toast } = useStore();
   const registrar = useRegistrar();
-  const [h, setH] = useState({ fecha: hoy, proveedorId: '', docTipo: 'FE', docNum: '', costosAdic: '', nota: '' });
-  const [lineas, setLineas] = useState([lineaVacia()]);
+  const pendientes = (o) => C.estadoOrden(db, o).lineas.filter((l) => l.pendiente > 0)
+    .map((l) => ({ productoId: l.productoId, lote: '', vence: '', cantidad: l.pendiente, costoUnit: l.costoUnit, enCompra: false }));
+  const ordenesAbiertas = db.ordenes.filter((o) => ['abierta', 'parcial'].includes(C.estadoOrden(db, o).estado));
+  const [h, setH] = useState(() => {
+    const o = ordenInicial;
+    return { fecha: hoy, proveedorId: o ? o.proveedorId : '', docTipo: 'FE', docNum: '', costosAdic: '', nota: '', bodega: o ? (o.bodega || C.bodegaPrincipal(db.config)) : C.bodegaPrincipal(db.config), ordenId: o ? o.id : '' };
+  });
+  const [lineas, setLineas] = useState(() => (ordenInicial ? pendientes(ordenInicial) : [lineaVacia()]));
   const [scan, setScan] = useState('');
   const [err, setErr] = useState([]);
   const [nuevoProv, setNuevoProv] = useState(false);
   const setHk = (k) => (e) => setH((x) => Object.assign({}, x, { [k]: e.target.value }));
   const setL = (i, k, v) => setLineas((ls) => ls.map((l, j) => (j === i ? Object.assign({}, l, { [k]: v }) : l)));
+  const prod = (id) => db.productos.find((p) => p.id === id);
 
   const elegirProveedor = (id) => {
     const p = db.proveedores.find((x) => x.id === id);
     setH((x) => Object.assign({}, x, { proveedorId: id, docTipo: p && p.obligadoFacturar === false ? 'DS' : 'FE' }));
+  };
+  const elegirOrden = (id) => {
+    const o = db.ordenes.find((x) => x.id === id);
+    if (!o) { setH((x) => Object.assign({}, x, { ordenId: '' })); return; }
+    const p = db.proveedores.find((x) => x.id === o.proveedorId);
+    setH((x) => Object.assign({}, x, { ordenId: id, proveedorId: o.proveedorId, docTipo: p && p.obligadoFacturar === false ? 'DS' : 'FE', bodega: o.bodega || x.bodega }));
+    setLineas(pendientes(o));
   };
 
   const leer = () => {
@@ -31,8 +55,10 @@ function NuevaEntrada({ onClose }) {
     const p = r.gtin ? db.productos.find((x) => x.gtin && sinCeros(x.gtin) === sinCeros(r.gtin)) : null;
     if (!p) return toast('Ningún producto tiene el GTIN ' + (r.gtin || '—') + '. Regístrelo en la ficha del producto.', 'error');
     setLineas((ls) => {
+      const i = ls.findIndex((l) => l.productoId === p.id && !l.lote);
+      if (i >= 0) return ls.map((l, j) => (j === i ? Object.assign({}, l, { lote: r.lote || '', vence: r.vence || '' }) : l));
       const base = ls.filter((l) => l.productoId || l.lote || l.cantidad);
-      return [...base, { productoId: p.id, lote: r.lote || '', vence: r.vence || '', cantidad: 1, costoUnit: '' }];
+      return [...base, { productoId: p.id, lote: r.lote || '', vence: r.vence || '', cantidad: 1, costoUnit: '', enCompra: false }];
     });
     setScan('');
     toast('Leído: ' + p.nombre + (r.lote ? ' · lote ' + r.lote : ''));
@@ -40,10 +66,13 @@ function NuevaEntrada({ onClose }) {
 
   const subtotal = lineas.reduce((s, l) => s + (Number(l.cantidad) || 0) * (Number(l.costoUnit) || 0), 0);
   const guardar = () => {
-    const ls = lineas.filter((l) => l.productoId || l.lote || l.cantidad).map((l) => ({
-      productoId: l.productoId, lote: l.lote.trim(), vence: l.vence, cantidad: Number(l.cantidad), costoUnit: l.costoUnit === '' ? '' : Number(l.costoUnit)
-    }));
-    const e = registrar(Object.assign({ tipo: 'entrada', lineas: ls }, h, { docNum: h.docNum.trim(), costosAdic: Number(h.costosAdic) || 0 }));
+    const ls = lineas.filter((l) => l.productoId || l.lote || l.cantidad).map((l) => {
+      const p = prod(l.productoId) || {};
+      const b = C.aUnidadBase(p, l.cantidad, l.costoUnit, l.enCompra);
+      return { productoId: l.productoId, lote: String(l.lote).trim(), vence: l.vence, cantidad: b.cantidad, costoUnit: b.costoUnit };
+    });
+    const o = db.ordenes.find((x) => x.id === h.ordenId);
+    const e = registrar(Object.assign({ tipo: 'entrada', lineas: ls }, h, { docNum: h.docNum.trim(), costosAdic: Number(h.costosAdic) || 0, ordenNum: o ? o.num : '' }));
     if (e.length) return setErr(e);
     onClose();
   };
@@ -53,14 +82,21 @@ function NuevaEntrada({ onClose }) {
       footer={<><span className="muted" style={{ marginRight: 'auto' }}>Subtotal {money(subtotal)} + costos adicionales {money(h.costosAdic)}</span><Btn onClick={onClose}>Cancelar</Btn><Btn variant="primary" onClick={guardar}>Registrar entrada</Btn></>}>
       <Errores lista={err} />
       <div className="form-grid">
+        <Field label="Orden de compra" hint="Opcional: trae las cantidades pendientes">
+          <select className="select input" value={h.ordenId} onChange={(e) => elegirOrden(e.target.value)}>
+            <option value="">Sin orden</option>
+            {ordenesAbiertas.map((o) => <option key={o.id} value={o.id}>{o.num} · {(db.proveedores.find((p) => p.id === o.proveedorId) || {}).nombre}</option>)}
+          </select>
+        </Field>
         <Field label="Fecha"><input className="input" type="date" value={h.fecha} max={hoy} onChange={setHk('fecha')} /></Field>
+        <Field label="Bodega que recibe"><SelectBodega value={h.bodega} onChange={(v) => setH((x) => Object.assign({}, x, { bodega: v }))} /></Field>
         <Field label="Proveedor" span>
           <div style={{ display: 'flex', gap: 8 }}>
-            <select className="select input" value={h.proveedorId} onChange={(e) => elegirProveedor(e.target.value)}>
+            <select className="select input" value={h.proveedorId} onChange={(e) => elegirProveedor(e.target.value)} disabled={!!h.ordenId}>
               <option value="">Seleccione…</option>
               {db.proveedores.map((p) => <option key={p.id} value={p.id}>{p.nombre} · {p.nit}</option>)}
             </select>
-            <Btn icon={Plus} onClick={() => setNuevoProv(true)} title="Nuevo proveedor" />
+            <Btn icon={Plus} onClick={() => setNuevoProv(true)} title="Nuevo proveedor" disabled={!!h.ordenId} />
           </div>
         </Field>
         <Field label="Tipo de soporte">
@@ -69,8 +105,8 @@ function NuevaEntrada({ onClose }) {
           </select>
         </Field>
         <Field label="Número del soporte" hint="Prefijo y consecutivo DIAN"><input className="input mono" value={h.docNum} onChange={setHk('docNum')} /></Field>
-        <Field label="Costos adicionales" hint="Fletes, seguros y aranceles no recuperables. Se prorratean al costo."><input className="input" type="number" min="0" value={h.costosAdic} onChange={setHk('costosAdic')} /></Field>
-        <Field label="Nota" span><input className="input" value={h.nota} onChange={setHk('nota')} /></Field>
+        <Field label="Costos adicionales" hint="Fletes, seguros y aranceles no recuperables"><input className="input" type="number" min="0" value={h.costosAdic} onChange={setHk('costosAdic')} /></Field>
+        <Field label="Nota"><input className="input" value={h.nota} onChange={setHk('nota')} /></Field>
       </div>
 
       <div className="section-title">Líneas</div>
@@ -82,19 +118,23 @@ function NuevaEntrada({ onClose }) {
       </div>
       <div className="tbl-wrap lines">
         <table className="tbl">
-          <thead><tr><th style={{ minWidth: 240 }}>Producto</th><th>Lote</th><th>Vence</th><th className="num">Cantidad</th><th className="num">Costo unit. (sin IVA descontable)</th><th className="num">Total</th><th /></tr></thead>
+          <thead><tr><th style={{ minWidth: 230 }}>Producto</th><th>Lote</th><th>Vence</th><th className="num">Cantidad</th><th>Unidad</th><th className="num">Costo unit. (sin IVA descontable)</th><th className="num">Total</th><th /></tr></thead>
           <tbody>
-            {lineas.map((l, i) => (
-              <tr key={i}>
-                <td><SelectProducto value={l.productoId} onChange={(v) => setL(i, 'productoId', v)} /></td>
-                <td><input className="input mono" value={l.lote} onChange={(e) => setL(i, 'lote', e.target.value)} /></td>
-                <td><input className="input" type="date" value={l.vence} onChange={(e) => setL(i, 'vence', e.target.value)} /></td>
-                <td><input className="input num" type="number" min="0" value={l.cantidad} onChange={(e) => setL(i, 'cantidad', e.target.value)} style={{ width: 100 }} /></td>
-                <td><input className="input num" type="number" min="0" value={l.costoUnit} onChange={(e) => setL(i, 'costoUnit', e.target.value)} style={{ width: 140 }} /></td>
-                <td className="num">{money((Number(l.cantidad) || 0) * (Number(l.costoUnit) || 0))}</td>
-                <td><Btn variant="ghost" size="sm" icon={Trash2} onClick={() => setLineas((ls) => (ls.length > 1 ? ls.filter((_, j) => j !== i) : [lineaVacia()]))} title="Quitar" /></td>
-              </tr>
-            ))}
+            {lineas.map((l, i) => {
+              const p = prod(l.productoId);
+              return (
+                <tr key={i}>
+                  <td><SelectProducto value={l.productoId} onChange={(v) => setL(i, 'productoId', v)} /></td>
+                  <td><input className="input mono" value={l.lote} onChange={(e) => setL(i, 'lote', e.target.value)} style={{ minWidth: 110 }} /></td>
+                  <td><input className="input" type="date" value={l.vence} onChange={(e) => setL(i, 'vence', e.target.value)} /></td>
+                  <td><input className="input num" type="number" min="0" value={l.cantidad} onChange={(e) => setL(i, 'cantidad', e.target.value)} style={{ width: 96 }} /></td>
+                  <td><SelectUnidad producto={p} value={l.enCompra} onChange={(v) => setL(i, 'enCompra', v)} /></td>
+                  <td><input className="input num" type="number" min="0" value={l.costoUnit} onChange={(e) => setL(i, 'costoUnit', e.target.value)} style={{ width: 130 }} /></td>
+                  <td className="num">{money((Number(l.cantidad) || 0) * (Number(l.costoUnit) || 0))}{l.enCompra && p ? <div className="small muted">{num(Number(l.cantidad) * Number(p.factorCompra))} {p.unidad}</div> : null}</td>
+                  <td><Btn variant="ghost" size="sm" icon={Trash2} onClick={() => setLineas((ls) => (ls.length > 1 ? ls.filter((_, j) => j !== i) : [lineaVacia()]))} title="Quitar" /></td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -102,8 +142,8 @@ function NuevaEntrada({ onClose }) {
         <Btn size="sm" icon={Plus} onClick={() => setLineas((ls) => [...ls, lineaVacia()])}>Agregar línea</Btn>
       </div>
       <Nota>
-        El sistema bloquea la entrada si falta el número de factura electrónica o documento soporte, si el producto no tiene registro INVIMA vigente o si el lote ya está vencido.
-        El IVA descontable no hace parte del costo.
+        Se bloquea la entrada si falta la factura electrónica o el documento soporte, si el producto no tiene registro INVIMA vigente o si el lote ya está vencido.
+        Si compra por empaque (caja, bolsa), elija esa unidad: el sistema convierte la cantidad y el costo a la unidad de consumo. El IVA descontable no hace parte del costo.
       </Nota>
       {nuevoProv && <FormProveedor onClose={() => setNuevoProv(false)} onGuardado={(p) => setH((x) => Object.assign({}, x, { proveedorId: p.id, docTipo: p.obligadoFacturar ? 'FE' : 'DS' }))} />}
     </Modal>
@@ -111,12 +151,13 @@ function NuevaEntrada({ onClose }) {
 }
 
 export default function Entradas() {
+  const { puede } = useStore();
   const [nueva, setNueva] = useState(false);
   return (
     <Panel title="Entradas de mercancía" icon={PackagePlus}
-      sub="Compras soportadas con factura electrónica o documento soporte. Cada línea registra lote y vencimiento."
-      actions={<Btn variant="primary" icon={Plus} onClick={() => setNueva(true)}>Nueva entrada</Btn>}>
-      <MovTabla tipos={['entrada']} vacio="Registre la primera compra." />
+      sub="Compras soportadas con factura electrónica o documento soporte, con o sin orden de compra. Cada línea registra lote y vencimiento."
+      actions={puede('entradas') && <Btn variant="primary" icon={Plus} onClick={() => setNueva(true)}>Nueva entrada</Btn>}>
+      <MovTabla tipos={['entrada', 'inicial']} vacio="Registre la primera compra." />
       {nueva && <NuevaEntrada onClose={() => setNueva(false)} />}
     </Panel>
   );

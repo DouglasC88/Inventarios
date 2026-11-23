@@ -3,7 +3,7 @@ import { useStore, C } from '../store.jsx';
 import { Chip, Gauge, Kpi, Panel, Empty } from '../components/ui.jsx';
 import { money, num, pct, fecha, TONO_MOV } from '../format.js';
 
-const DESTINO_ALERTA = { stock: 'productos', invima: 'productos', vencimiento: 'lotes', faltantes: 'ajustes', conteo: 'conteos', frio: 'frio' };
+const DESTINO_ALERTA = { stock: 'reabastecimiento', invima: 'productos', vencimiento: 'lotes', faltantes: 'ajustes', conteo: 'conteos', frio: 'frio', reorden: 'reabastecimiento', orden: 'ordenes', requisicion: 'requisiciones' };
 
 export default function Dashboard() {
   const { db, state, hoy, go } = useStore();

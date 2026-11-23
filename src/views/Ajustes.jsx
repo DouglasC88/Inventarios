@@ -5,13 +5,14 @@ import { Btn, Errores, Field, Kpi, Modal, Nota, Panel, Tabs } from '../component
 import { MovTabla, SelectProducto, useRegistrar } from '../components/Movimientos.jsx';
 import { fecha, money, num, pct } from '../format.js';
 
-const claveLote = (l) => l.productoId + '||' + l.lote + '||' + l.vence;
+const claveLote = (l) => l.productoId + '||' + l.bodega + '||' + l.lote + '||' + l.vence;
+const desdeClave = (k) => { const [productoId, bodega, lote, vence] = String(k || '').split('||'); return { productoId: productoId || '', bodega: bodega || '', lote: lote || '', vence: vence || '' }; };
 
 function OpcionesLotes({ todos }) {
   const { db, state, hoy } = useStore();
   return C.lotes(db, state, hoy, { todos }).map((l) => (
     <option key={claveLote(l)} value={claveLote(l)}>
-      {l.producto.codigo} · {l.producto.nombre} · lote {l.lote} · vence {fecha(l.vence)} · {num(l.qty)} {l.producto.unidad}
+      {l.bodega} · {l.producto.codigo} · {l.producto.nombre} · lote {l.lote} · vence {fecha(l.vence)} · {num(l.qty)} {l.producto.unidad}
     </option>
   ));
 }
@@ -25,10 +26,7 @@ export function NuevaBaja({ onClose, inicial }) {
   const setHk = (k) => (e) => setH((x) => Object.assign({}, x, { [k]: e.target.value }));
   const setL = (i, k, v) => setLineas((ls) => ls.map((l, j) => (j === i ? Object.assign({}, l, { [k]: v }) : l)));
   const guardar = () => {
-    const ls = lineas.filter((l) => l.clave || l.cantidad).map((l) => {
-      const [productoId, lote, vence] = l.clave.split('||');
-      return { productoId: productoId || '', lote: lote || '', vence: vence || '', cantidad: Number(l.cantidad) };
-    });
+    const ls = lineas.filter((l) => l.clave || l.cantidad).map((l) => Object.assign(desdeClave(l.clave), { cantidad: Number(l.cantidad) }));
     const e = registrar(Object.assign({ tipo: 'baja', lineas: ls }, h), 'Baja registrada');
     if (e.length) return setErr(e);
     onClose();
@@ -74,19 +72,20 @@ function NuevoAjuste({ onClose }) {
   const { hoy } = useStore();
   const registrar = useRegistrar();
   const [h, setH] = useState({ fecha: hoy, acta: '', autoriza: '', nota: '' });
-  const vacia = () => ({ clave: '', productoId: '', lote: '', vence: '', cantidad: '', causa: 'faltante', costoUnit: '' });
+  const { db } = useStore();
+  const vacia = () => ({ clave: '', productoId: '', bodega: C.bodegaPrincipal(db.config), lote: '', vence: '', cantidad: '', causa: 'faltante', costoUnit: '' });
   const [lineas, setLineas] = useState([vacia()]);
   const [err, setErr] = useState([]);
   const setHk = (k) => (e) => setH((x) => Object.assign({}, x, { [k]: e.target.value }));
   const setL = (i, k, v) => setLineas((ls) => ls.map((l, j) => (j === i ? Object.assign({}, l, { [k]: v }) : l)));
   const guardar = () => {
     const ls = lineas.filter((l) => l.clave || l.cantidad).map((l) => {
-      let productoId = l.productoId, lote = l.lote, vence = l.vence;
-      if (l.clave && l.clave !== 'nuevo') [productoId, lote, vence] = l.clave.split('||');
+      let { productoId, bodega, lote, vence } = l;
+      if (l.clave && l.clave !== 'nuevo') ({ productoId, bodega, lote, vence } = desdeClave(l.clave));
       let cantidad = Math.abs(Number(l.cantidad));
       if (l.causa === 'faltante') cantidad = -cantidad;
       if (l.causa !== 'faltante' && l.causa !== 'sobrante' && Number(l.cantidad) < 0) cantidad = -cantidad;
-      return { productoId, lote: String(lote || '').trim(), vence, cantidad, causa: l.causa, costoUnit: l.costoUnit === '' ? undefined : Number(l.costoUnit) };
+      return { productoId, bodega, lote: String(lote || '').trim(), vence, cantidad, causa: l.causa, costoUnit: l.costoUnit === '' ? undefined : Number(l.costoUnit) };
     });
     const e = registrar(Object.assign({ tipo: 'ajuste', lineas: ls }, h), 'Ajuste registrado');
     if (e.length) return setErr(e);
@@ -118,6 +117,7 @@ function NuevoAjuste({ onClose }) {
                   {l.clave === 'nuevo' && (
                     <div className="form-grid" style={{ marginTop: 8 }}>
                       <SelectProducto value={l.productoId} onChange={(v) => setL(i, 'productoId', v)} />
+                      <select className="select input" value={l.bodega} onChange={(e) => setL(i, 'bodega', e.target.value)}>{db.config.ubicaciones.map((b) => <option key={b}>{b}</option>)}</select>
                       <input className="input mono" placeholder="Lote" value={l.lote} onChange={(e) => setL(i, 'lote', e.target.value)} />
                       <input className="input" type="date" value={l.vence} onChange={(e) => setL(i, 'vence', e.target.value)} />
                     </div>
@@ -143,7 +143,7 @@ function NuevoAjuste({ onClose }) {
 }
 
 export default function Ajustes() {
-  const { db, hoy } = useStore();
+  const { db, hoy, puede } = useStore();
   const [modal, setModal] = useState(null);
   const [tab, setTab] = useState('todos');
   const year = C.yearOf(hoy);
@@ -158,7 +158,7 @@ export default function Ajustes() {
       </div>
       <Panel title="Ajustes y bajas" icon={SlidersHorizontal}
         sub="Toda diferencia queda con causa, acta y responsable. Los documentos no se borran; se anulan con motivo."
-        actions={<><Btn icon={Plus} onClick={() => setModal('ajuste')}>Nuevo ajuste</Btn><Btn variant="danger" icon={Ban} onClick={() => setModal('baja')}>Nueva baja</Btn></>}>
+        actions={<>{puede('ajustes') && <Btn icon={Plus} onClick={() => setModal('ajuste')}>Nuevo ajuste</Btn>}{puede('bajas') && <Btn variant="danger" icon={Ban} onClick={() => setModal('baja')}>Nueva baja</Btn>}</>}>
         <div className="toolbar"><Tabs value={tab} onChange={setTab} options={[['todos', 'Todos'], ['ajuste', 'Ajustes'], ['baja', 'Bajas']]} /></div>
         <MovTabla key={tab} tipos={tab === 'todos' ? ['ajuste', 'baja'] : [tab]} vacio="No hay ajustes ni bajas." />
       </Panel>

@@ -65,7 +65,7 @@ function NuevoCierre({ onClose }) {
 }
 
 export default function Cierres() {
-  const { db } = useStore();
+  const { db, puede } = useStore();
   const [nuevo, setNuevo] = useState(false);
   const [ver, setVer] = useState(null);
   const lista = db.cierres.slice().sort((a, b) => (a.fecha < b.fecha ? 1 : -1));
@@ -77,7 +77,7 @@ export default function Cierres() {
   };
   return (
     <Panel title="Cierres de periodo" icon={Lock} sub="Congela el periodo y calcula el deterioro por valor neto realizable."
-      actions={<Btn variant="primary" icon={Plus} onClick={() => setNuevo(true)}>Nuevo cierre</Btn>}>
+      actions={puede('cierres') && <Btn variant="primary" icon={Plus} onClick={() => setNuevo(true)}>Nuevo cierre</Btn>}>
       {lista.length ? (
         <div className="tbl-wrap">
           <table className="tbl">
