@@ -50,6 +50,9 @@ const NAV = [
     ['ajustes', 'Ajustes y bajas', SlidersHorizontal, Ajustes],
     ['conteos', 'Conteos físicos', ClipboardCheck, Conteos]
   ]],
+  ['Reportes', [
+    ['reportes', 'Centro de reportes', BarChart3, Reportes]
+  ]],
   ['Compras', [
     ['ordenes', 'Órdenes de compra', ShoppingCart, Ordenes],
     ['reabastecimiento', 'Reabastecimiento', RefreshCcw, Reabastecimiento]
@@ -60,12 +63,11 @@ const NAV = [
     ['vencimientos', 'Vencimientos', CalendarClock, Lotes],
     ['trazabilidad', 'Trazabilidad', ScanSearch, Trazabilidad],
     ['frio', 'Cadena de frío', Thermometer, Frio],
-    ['reportes', 'Reportes y análisis', BarChart3, Reportes],
     ['cierres', 'Cierres de periodo', Lock, Cierres]
   ]],
   ['Maestros', [
     ['bodegas', 'Bodegas', Warehouse, Bodegas],
-    ['grupos', 'Grupos de productos', FolderTree, Grupos],
+    ['grupos', 'Clasificación', FolderTree, Grupos],
     ['productos', 'Productos', Boxes, Productos],
     ['lotes', 'Lotes', Tags, LotesMaestro],
     ['kits', 'Kits por procedimiento', Layers, Kits],

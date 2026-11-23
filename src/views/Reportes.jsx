@@ -1,200 +1,152 @@
 import { useState } from 'react';
-import { BarChart3, Download } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowUp, BarChart3, ChevronRight, Download, FileText, Printer } from 'lucide-react';
 import { useStore, C } from '../store.jsx';
-import { Btn, Chip, Empty, Field, Panel, Tabs } from '../components/ui.jsx';
-import { descargar, fecha, money, money2, num, pct, TONO_MOV } from '../format.js';
+import { Btn, Chip, Empty, Field, Nota, Panel, SearchBox } from '../components/ui.jsx';
+import { SelectBodega, SelectGrupo, SelectProducto, SelectTercero } from '../components/Movimientos.jsx';
+import { imprimirTabla } from '../components/imprimir.js';
+import { CATEGORIAS_REPORTE, REPORTES, filtrosIniciales } from '../core/reportes.js';
+import { descargar, fecha, money, num } from '../format.js';
 
-function Valorizado() {
-  const { db, hoy } = useStore();
-  const [corte, setCorte] = useState(hoy);
-  const [bodega, setBodega] = useState('todas');
-  const st = C.replay(db, { hasta: corte });
-  const filas = db.productos.map((p) => {
-    const s = st.prods[p.id];
-    const qty = bodega === 'todas' ? (s ? s.qty : 0) : C.existencia(st, p.id, bodega);
-    const unit = s && s.qty ? s.value / s.qty : 0;
-    return { p, qty, unit, valor: C.r2(qty * unit) };
-  }).filter((f) => f.qty > 0);
-  const total = filas.reduce((s, f) => s + f.valor, 0);
+const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+export function formatear(v, tipo) {
+  if (v === '' || v === null || v === undefined) return '';
+  if (tipo === 'money') return money(v);
+  if (tipo === 'num') return num(v);
+  if (tipo === 'pct') return Number(v).toFixed(1) + ' %';
+  if (tipo === 'date') return fecha(v);
+  return String(v);
+}
+
+function Catalogo() {
+  const { go } = useStore();
+  const [q, setQ] = useState('');
+  return (
+    <div className="stack">
+      <Panel title={'Centro de reportes · ' + REPORTES.length + ' reportes'} icon={BarChart3}
+        sub="Todos los reportes se pueden filtrar por fechas, bodega, clasificación, producto o tercero, ordenar por cualquier columna, exportar a Excel (CSV) e imprimir o guardar en PDF.">
+        <div className="toolbar"><SearchBox value={q} onChange={setQ} placeholder="Buscar reporte: existencias, kardex, compras, vencimientos, ABC…" /></div>
+      </Panel>
+      <div className="law">
+        {CATEGORIAS_REPORTE.map(([cat, titulo]) => {
+          const lista = REPORTES.filter((r) => r.cat === cat && norm(r.t + ' ' + r.d).includes(norm(q)));
+          if (!lista.length) return null;
+          return (
+            <Panel key={cat} title={titulo} icon={FileText}>
+              <div className="rep-list">
+                {lista.map((r) => (
+                  <button type="button" key={r.id} className="rep-item" onClick={() => go('reportes', r.id)}>
+                    <div><b>{r.t}</b><span>{r.d}</span></div>
+                    <ChevronRight size={16} />
+                  </button>
+                ))}
+              </div>
+            </Panel>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function Filtro({ k, f, set, hoy }) {
+  const v = (x) => set(k, x);
+  switch (k) {
+    case 'desde': return <Field label="Desde"><input className="input" type="date" value={f.desde} max={hoy} onChange={(e) => v(e.target.value)} /></Field>;
+    case 'hasta': return <Field label="Hasta"><input className="input" type="date" value={f.hasta} max={hoy} onChange={(e) => v(e.target.value)} /></Field>;
+    case 'corte': return <Field label="Fecha de corte"><input className="input" type="date" value={f.corte} max={hoy} onChange={(e) => v(e.target.value)} /></Field>;
+    case 'bodega': return <Field label="Bodega"><SelectBodega value={f.bodega} incluirTodas onChange={v} /></Field>;
+    case 'grupo': return <Field label="Clasificación"><SelectGrupo value={f.grupo} incluirTodos onChange={v} /></Field>;
+    case 'producto': return <Field label="Producto"><div className="with-clear"><SelectProducto value={f.producto} onChange={v} placeholder="Todos los productos (escriba para filtrar)" />{f.producto && <button type="button" onClick={() => v('')} title="Quitar filtro">×</button>}</div></Field>;
+    case 'tercero': return <Field label="Tercero"><div className="with-clear"><SelectTercero value={f.tercero} onChange={v} />{f.tercero && <button type="button" onClick={() => v('')} title="Quitar filtro">×</button>}</div></Field>;
+    case 'tipoMov': return <Field label="Tipo de movimiento"><select className="select input" value={f.tipoMov} onChange={(e) => v(e.target.value)}><option value="">Todos</option>{Object.entries(C.TIPOS_MOV).map(([a, b]) => <option key={a} value={a}>{b}</option>)}</select></Field>;
+    case 'destinoTipo': return <Field label="Tipo de destino"><select className="select input" value={f.destinoTipo} onChange={(e) => v(e.target.value)}><option value="">Todos</option>{['Paciente', 'Consultorio', 'Servicio', 'Venta'].map((d) => <option key={d}>{d}</option>)}</select></Field>;
+    case 'dias': return <Field label="Vencen en los próximos (días)"><input className="input" type="number" min="1" value={f.dias} onChange={(e) => v(e.target.value)} /></Field>;
+    case 'diasAnalisis': return <Field label="Periodo de análisis"><select className="select input" value={f.diasAnalisis} onChange={(e) => v(e.target.value)}><option value="90">Últimos 90 días</option><option value="180">Últimos 180 días</option><option value="365">Últimos 12 meses</option></select></Field>;
+    case 'nivel': return <Field label="Nivel"><select className="select input" value={f.nivel} onChange={(e) => v(e.target.value)}><option value="1">Línea</option><option value="2">Grupo</option><option value="3">Subgrupo</option></select></Field>;
+    case 'anio': return <Field label="Año"><input className="input" type="number" value={f.anio} onChange={(e) => v(e.target.value)} /></Field>;
+    case 'texto': return <Field label="Contiene"><input className="input" value={f.texto} onChange={(e) => v(e.target.value)} placeholder="Usuario, acción o detalle" /></Field>;
+    default: return null;
+  }
+}
+
+function Reporte({ rep }) {
+  const { db, state, hoy, go } = useStore();
+  const [f, setF] = useState(() => filtrosIniciales(hoy));
+  const [orden, setOrden] = useState(null);
+  const set = (k, v) => setF((x) => Object.assign({}, x, { [k]: v }));
+  const faltan = (rep.requiere || []).filter((k) => !f[k]);
+  let filas = faltan.length ? [] : rep.filas({ db, state, hoy }, f);
+  if (orden) {
+    const [k, dir] = orden;
+    filas = filas.slice().sort((a, b) => {
+      const x = a[k], y = b[k];
+      const r = typeof x === 'number' && typeof y === 'number' ? x - y : String(x ?? '').localeCompare(String(y ?? ''), 'es', { numeric: true });
+      return dir === 'asc' ? r : -r;
+    });
+  }
+  const totales = (rep.total || []).reduce((o, k) => Object.assign(o, { [k]: filas.reduce((s, r) => s + (Number(r[k]) || 0), 0) }), {});
+  const describir = () => rep.filtros.filter((k) => f[k] !== '' && f[k] !== 'todas' && f[k] !== 'todos').map((k) => {
+    const etiquetas = { desde: 'Desde', hasta: 'Hasta', corte: 'Corte', bodega: 'Bodega', grupo: 'Clasificación', producto: 'Producto', tercero: 'Tercero', tipoMov: 'Tipo', destinoTipo: 'Destino', dias: 'Días', diasAnalisis: 'Periodo (días)', nivel: 'Nivel', anio: 'Año', texto: 'Texto' };
+    let val = f[k];
+    if (k === 'grupo') val = C.rutaGrupo(db, f[k]);
+    if (k === 'producto') val = (db.productos.find((p) => p.id === f[k]) || {}).nombre;
+    if (k === 'tercero') val = (db.proveedores.find((t) => t.id === f[k]) || {}).nombre;
+    if (k === 'tipoMov') val = C.TIPOS_MOV[f[k]];
+    if (['desde', 'hasta', 'corte'].includes(k)) val = fecha(f[k]);
+    return etiquetas[k] + ': ' + val;
+  }).join(' · ');
   const exportar = () => {
-    const rows = [['Código', 'Producto', 'Categoría', 'Unidad', 'Existencia', 'Costo unitario', 'Valor']];
-    filas.forEach((f) => rows.push([f.p.codigo, f.p.nombre, C.CATEGORIAS[f.p.categoria], f.p.unidad, f.qty, C.r2(f.unit), f.valor]));
-    rows.push(['', 'TOTAL', '', '', '', '', C.r2(total)]);
-    descargar('inventario-valorado-' + corte + '-' + bodega + '.csv', C.csv(rows));
+    const rows = [rep.cols.map((c) => c[1])];
+    filas.forEach((r) => rows.push(rep.cols.map(([k, , t]) => (t === 'pct' && r[k] !== '' ? C.r2(r[k]) : r[k]))));
+    if (rep.total) rows.push(rep.cols.map(([k], i) => (i === 0 ? 'TOTAL' : k in totales ? C.r2(totales[k]) : '')));
+    descargar(rep.id + '-' + hoy + '.csv', C.csv(rows));
   };
+  const imprimir = () => imprimirTabla(db, rep.t, describir(), rep.cols.map(([k, t, tipo]) => ({ t, num: ['num', 'money', 'pct'].includes(tipo) })),
+    filas.map((r) => rep.cols.map(([k, , tipo]) => formatear(r[k], tipo))),
+    rep.total ? rep.cols.map(([k, , tipo], i) => (i === 0 ? 'TOTAL' : k in totales ? formatear(totales[k], tipo) : '')) : null);
+
   return (
-    <>
-      <div className="toolbar">
-        <Field label="Fecha de corte"><input className="input" type="date" value={corte} max={hoy} onChange={(e) => setCorte(e.target.value)} /></Field>
-        <Field label="Bodega">
-          <select className="select input" value={bodega} onChange={(e) => setBodega(e.target.value)}>
-            <option value="todas">Todas</option>{db.config.ubicaciones.map((b) => <option key={b}>{b}</option>)}
-          </select>
-        </Field>
-        <span style={{ flex: 1 }} /><Btn icon={Download} onClick={exportar}>Exportar</Btn>
-      </div>
-      <div className="tbl-wrap">
-        <table className="tbl">
-          <thead><tr><th>Código</th><th>Producto</th><th>Categoría</th><th className="num">Existencia</th><th className="num">Costo unit.</th><th className="num">Valor</th></tr></thead>
-          <tbody>{filas.map((f) => <tr key={f.p.id}><td className="mono">{f.p.codigo}</td><td>{f.p.nombre}</td><td>{C.CATEGORIAS[f.p.categoria]}</td><td className="num">{num(f.qty)} {f.p.unidad}</td><td className="num">{money2(f.unit)}</td><td className="num">{money(f.valor)}</td></tr>)}</tbody>
-          <tfoot><tr><td colSpan={5}>Total al {fecha(corte)}</td><td className="num">{money(total)}</td></tr></tfoot>
-        </table>
-      </div>
-    </>
+    <div className="stack">
+      <Panel title={rep.t} icon={BarChart3} sub={rep.d}
+        actions={<><Btn icon={ArrowLeft} onClick={() => go('reportes')}>Todos los reportes</Btn><Btn icon={Download} onClick={exportar} disabled={!filas.length}>Excel (CSV)</Btn><Btn variant="primary" icon={Printer} onClick={imprimir} disabled={!filas.length}>Imprimir / PDF</Btn></>}>
+        {rep.filtros.length > 0 && <div className="form-grid rep-filtros">{rep.filtros.map((k) => <Filtro key={k} k={k} f={f} set={set} hoy={hoy} />)}</div>}
+      </Panel>
+      <Panel>
+        {faltan.length ? <Empty icon={BarChart3} title="Elija un producto" text="Este reporte se genera para un producto: escríbalo en el filtro." /> : filas.length ? (
+          <>
+            <div className="small muted" style={{ marginBottom: 8 }}>{num(filas.length)} filas · clic en un encabezado para ordenar</div>
+            <div className="tbl-wrap" style={{ maxHeight: '70vh' }}>
+              <table className="tbl">
+                <thead><tr>{rep.cols.map(([k, t, tipo]) => (
+                  <th key={k} className={['num', 'money', 'pct'].includes(tipo) ? 'num' : ''} style={{ cursor: 'pointer' }}
+                    onClick={() => setOrden((o) => (o && o[0] === k ? [k, o[1] === 'asc' ? 'desc' : 'asc'] : [k, ['num', 'money', 'pct'].includes(tipo) ? 'desc' : 'asc']))}>
+                    {t} {orden && orden[0] === k ? (orden[1] === 'asc' ? <ArrowUp size={11} /> : <ArrowDown size={11} />) : null}
+                  </th>
+                ))}</tr></thead>
+                <tbody>
+                  {filas.map((r, i) => (
+                    <tr key={i}>{rep.cols.map(([k, , tipo]) => (
+                      <td key={k} className={['num', 'money', 'pct'].includes(tipo) ? 'num' : ''}>
+                        {tipo === 'chip' ? (r[k] ? <Chip tone={r[k + 'Tono'] || 'muted'}>{r[k]}</Chip> : '') : formatear(r[k], tipo)}
+                      </td>
+                    ))}</tr>
+                  ))}
+                </tbody>
+                {rep.total && (
+                  <tfoot><tr>{rep.cols.map(([k, , tipo], i) => <td key={k} className={['num', 'money', 'pct'].includes(tipo) ? 'num' : ''}>{i === 0 ? 'Total' : k in totales ? formatear(totales[k], tipo) : ''}</td>)}</tr></tfoot>
+                )}
+              </table>
+            </div>
+          </>
+        ) : <Empty icon={BarChart3} title="Sin datos" text="No hay información con estos filtros. Amplíe el rango de fechas o quite filtros." />}
+      </Panel>
+      {rep.id === 'faltantes' && <Nota>El límite del 3 % aplica a mercancía de fácil destrucción o pérdida (ET art. 64). Confirme con su contador el texto vigente tras la Ley 1819 de 2016.</Nota>}
+    </div>
   );
 }
-
-function ABC() {
-  const { db, state, hoy } = useStore();
-  const [dias, setDias] = useState(365);
-  const r = C.analisisABC(db, state, hoy, dias);
-  const tono = { A: 'magenta', B: 'amber', C: 'cyan' };
-  const cuenta = (k) => r.filas.filter((f) => f.clase === k).length;
-  const exportar = () => {
-    const rows = [['Clase', 'Código', 'Producto', 'Cantidad consumida', 'Valor consumido', 'Participación %', 'Acumulado %']];
-    r.filas.forEach((f) => rows.push([f.clase, f.producto.codigo, f.producto.nombre, f.cantidad, f.valor, C.r2(f.participacion), C.r2(f.acumulado)]));
-    descargar('analisis-abc-' + hoy + '.csv', C.csv(rows));
-  };
-  return (
-    <>
-      <div className="toolbar">
-        <Tabs value={String(dias)} onChange={(v) => setDias(Number(v))} options={[['90', '90 días'], ['180', '180 días'], ['365', '12 meses']]} />
-        <Chip tone="magenta">A: {cuenta('A')}</Chip><Chip tone="amber">B: {cuenta('B')}</Chip><Chip tone="cyan">C: {cuenta('C')}</Chip>
-        <span style={{ flex: 1 }} /><Btn icon={Download} onClick={exportar}>Exportar</Btn>
-      </div>
-      <p className="muted small">Clase A: productos que suman el 80 % del valor consumido (control estricto y conteo frecuente). B: siguiente 15 %. C: el resto.</p>
-      <div className="tbl-wrap">
-        <table className="tbl">
-          <thead><tr><th>Clase</th><th>Producto</th><th className="num">Cantidad</th><th className="num">Valor consumido</th><th className="num">Participación</th><th className="num">Acumulado</th></tr></thead>
-          <tbody>{r.filas.map((f) => <tr key={f.producto.id}><td><Chip tone={tono[f.clase]}>{f.clase}</Chip></td><td>{f.producto.nombre}</td><td className="num">{num(f.cantidad)}</td><td className="num">{money(f.valor)}</td><td className="num">{pct(f.participacion)}</td><td className="num">{pct(f.acumulado)}</td></tr>)}</tbody>
-          <tfoot><tr><td colSpan={3}>Total</td><td className="num">{money(r.total)}</td><td colSpan={2} /></tr></tfoot>
-        </table>
-      </div>
-    </>
-  );
-}
-
-function Rotacion() {
-  const { db, hoy } = useStore();
-  const [dias, setDias] = useState(365);
-  const filas = C.rotacion(db, hoy, dias).sort((a, b) => b.rotacion - a.rotacion);
-  const exportar = () => {
-    const rows = [['Código', 'Producto', 'Inventario inicial', 'Inventario final', 'Inventario promedio', 'Costo consumido', 'Rotación', 'Días de inventario']];
-    filas.forEach((f) => rows.push([f.producto.codigo, f.producto.nombre, f.inicial, f.final, f.promedio, f.costo, C.r2(f.rotacion), f.dias === null ? '' : f.dias]));
-    descargar('rotacion-' + hoy + '.csv', C.csv(rows));
-  };
-  return (
-    <>
-      <div className="toolbar">
-        <Tabs value={String(dias)} onChange={(v) => setDias(Number(v))} options={[['90', '90 días'], ['180', '180 días'], ['365', '12 meses']]} />
-        <span style={{ flex: 1 }} /><Btn icon={Download} onClick={exportar}>Exportar</Btn>
-      </div>
-      <p className="muted small">Rotación = costo consumido ÷ inventario promedio. Días de inventario = días del periodo ÷ rotación.</p>
-      <div className="tbl-wrap">
-        <table className="tbl">
-          <thead><tr><th>Producto</th><th className="num">Inv. promedio</th><th className="num">Costo consumido</th><th className="num">Rotación</th><th className="num">Días de inventario</th></tr></thead>
-          <tbody>{filas.map((f) => <tr key={f.producto.id}><td>{f.producto.nombre}</td><td className="num">{money(f.promedio)}</td><td className="num">{money(f.costo)}</td><td className="num">{f.rotacion.toFixed(2)}</td><td className="num">{f.dias === null ? '—' : num(f.dias)}</td></tr>)}</tbody>
-        </table>
-      </div>
-    </>
-  );
-}
-
-function Consumos() {
-  const { db, state, hoy } = useStore();
-  const [desde, setDesde] = useState(C.addDays(hoy, -90));
-  const [hasta, setHasta] = useState(hoy);
-  const [tipo, setTipo] = useState('todos');
-  const grupos = C.consumoPorDestino(db, state, desde, hasta).filter((g) => tipo === 'todos' || g.destinoTipo === tipo);
-  const total = grupos.reduce((s, g) => s + g.valor, 0);
-  const exportar = () => {
-    const rows = [['Tipo', 'Destino', 'Salidas', 'Procedimientos', 'Valor']];
-    grupos.forEach((g) => rows.push([g.destinoTipo, g.destino, g.salidas, Object.entries(g.procedimientos).map(([k, v]) => k + ' (' + v + ')').join(', '), g.valor]));
-    descargar('consumos-' + desde + '-' + hasta + '.csv', C.csv(rows));
-  };
-  return (
-    <>
-      <div className="toolbar">
-        <Field label="Desde"><input className="input" type="date" value={desde} onChange={(e) => setDesde(e.target.value)} /></Field>
-        <Field label="Hasta"><input className="input" type="date" value={hasta} max={hoy} onChange={(e) => setHasta(e.target.value)} /></Field>
-        <Tabs value={tipo} onChange={setTipo} options={[['todos', 'Todos'], ['Paciente', 'Pacientes'], ['Consultorio', 'Consultorios'], ['Servicio', 'Servicios']]} />
-        <span style={{ flex: 1 }} /><Btn icon={Download} onClick={exportar}>Exportar</Btn>
-      </div>
-      {grupos.length ? (
-        <div className="tbl-wrap">
-          <table className="tbl">
-            <thead><tr><th>Tipo</th><th>Destino</th><th>Procedimientos</th><th className="num">Salidas</th><th className="num">Valor consumido</th></tr></thead>
-            <tbody>{grupos.map((g, i) => <tr key={i}><td>{g.destinoTipo}</td><td className="strong">{g.destino}</td><td className="small">{Object.entries(g.procedimientos).map(([k, v]) => k + ' (' + v + ')').join(', ') || '—'}</td><td className="num">{g.salidas}</td><td className="num">{money(g.valor)}</td></tr>)}</tbody>
-            <tfoot><tr><td colSpan={4}>Total</td><td className="num">{money(total)}</td></tr></tfoot>
-          </table>
-        </div>
-      ) : <Empty icon={BarChart3} title="Sin consumos" text="No hay salidas en el periodo." />}
-    </>
-  );
-}
-
-function SinMovimiento() {
-  const { db, state, hoy } = useStore();
-  const [dias, setDias] = useState(180);
-  const filas = C.sinMovimiento(db, state, hoy, dias);
-  return (
-    <>
-      <div className="toolbar"><Tabs value={String(dias)} onChange={(v) => setDias(Number(v))} options={[['90', '90 días'], ['180', '180 días'], ['365', '12 meses']]} /></div>
-      <p className="muted small">Productos con existencia y sin consumo en el periodo: candidatos a obsolescencia y a revisión del valor neto realizable.</p>
-      {filas.length ? (
-        <div className="tbl-wrap">
-          <table className="tbl">
-            <thead><tr><th>Producto</th><th>Última salida</th><th className="num">Existencia</th><th className="num">Valor inmovilizado</th></tr></thead>
-            <tbody>{filas.map((f) => <tr key={f.producto.id}><td>{f.producto.nombre}</td><td>{f.ultimaSalida ? fecha(f.ultimaSalida) : 'Nunca'}</td><td className="num">{num(f.existencia)}</td><td className="num">{money(f.valor)}</td></tr>)}</tbody>
-          </table>
-        </div>
-      ) : <Empty icon={BarChart3} title="Sin productos inmovilizados" text="Todos los productos tuvieron consumo en el periodo." />}
-    </>
-  );
-}
-
-function Libro() {
-  const { db, state, hoy } = useStore();
-  const [desde, setDesde] = useState(C.addDays(hoy, -30));
-  const [hasta, setHasta] = useState(hoy);
-  const movs = C.ordenar(db.movimientos).filter((m) => m.fecha >= desde && m.fecha <= hasta);
-  const exportar = () => {
-    const rows = [['Fecha', 'Documento', 'Tipo', 'Bodega', 'Producto', 'Lote', 'Vence', 'Cantidad', 'Costo unitario', 'Valor', 'Estado', 'Usuario']];
-    movs.forEach((m) => m.lineas.forEach((l, i) => {
-      const c = state.movCost[m.id];
-      const p = db.productos.find((x) => x.id === l.productoId);
-      rows.push([m.fecha, m.num, C.TIPOS_MOV[m.tipo], l.bodega || C.bodegaDe(m, db.config) + (m.tipo === 'traslado' ? ' → ' + m.bodegaDestino : ''), p ? p.nombre : '', l.lote, l.vence, l.cantidad, c ? C.r2(c.lineas[i].unit) : '', c ? c.lineas[i].valor : '', m.anulado ? 'Anulado' : 'Vigente', m.usuario || '']);
-    }));
-    descargar('libro-movimientos-' + desde + '-' + hasta + '.csv', C.csv(rows));
-  };
-  return (
-    <>
-      <div className="toolbar">
-        <Field label="Desde"><input className="input" type="date" value={desde} onChange={(e) => setDesde(e.target.value)} /></Field>
-        <Field label="Hasta"><input className="input" type="date" value={hasta} max={hoy} onChange={(e) => setHasta(e.target.value)} /></Field>
-        <span style={{ flex: 1 }} /><Btn icon={Download} onClick={exportar}>Exportar</Btn>
-      </div>
-      <div className="tbl-wrap">
-        <table className="tbl">
-          <thead><tr><th>Fecha</th><th>Documento</th><th>Tipo</th><th>Bodega</th><th className="num">Líneas</th><th className="num">Valor</th><th>Usuario</th></tr></thead>
-          <tbody>{movs.map((m) => <tr key={m.id} className={m.anulado ? 'anulado' : ''}><td>{fecha(m.fecha)}</td><td className="mono">{m.num}</td><td><Chip tone={TONO_MOV[m.tipo]}>{C.TIPOS_MOV[m.tipo]}</Chip></td><td>{C.bodegaDe(m, db.config)}{m.tipo === 'traslado' ? ' → ' + m.bodegaDestino : ''}</td><td className="num">{m.lineas.length}</td><td className="num">{money(state.movCost[m.id]?.total || 0)}</td><td className="small">{m.usuario}</td></tr>)}</tbody>
-        </table>
-      </div>
-    </>
-  );
-}
-
-const TABS = [['valorizado', 'Inventario valorado'], ['abc', 'Análisis ABC'], ['rotacion', 'Rotación'], ['consumos', 'Consumos por destino'], ['inmovilizado', 'Sin movimiento'], ['libro', 'Libro de movimientos']];
-const VISTAS = { valorizado: Valorizado, abc: ABC, rotacion: Rotacion, consumos: Consumos, inmovilizado: SinMovimiento, libro: Libro };
 
 export default function Reportes({ arg }) {
-  const { go } = useStore();
-  const tab = VISTAS[arg] ? arg : 'valorizado';
-  const V = VISTAS[tab];
-  return (
-    <Panel title="Reportes y análisis" icon={BarChart3}>
-      <div className="toolbar"><Tabs value={tab} onChange={(v) => go('reportes', v)} options={TABS} /></div>
-      <V />
-    </Panel>
-  );
+  const rep = REPORTES.find((r) => r.id === arg);
+  return rep ? <Reporte key={rep.id} rep={rep} /> : <Catalogo />;
 }

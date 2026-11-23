@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Layers, PackageMinus, Plus, Trash2 } from 'lucide-react';
 import { useStore, C } from '../store.jsx';
 import { Btn, Errores, Field, Modal, Nota, Panel } from '../components/ui.jsx';
-import { MovTabla, SelectBodega, SelectProducto, TablaFEFO, asignarFEFO, explicarFaltante, nombreProducto, useRegistrar } from '../components/Movimientos.jsx';
+import { MovTabla, SelectBodega, SelectProducto, TablaFEFO, asignarFEFO, explicarFaltante, nombreProducto, useRegistrar, SelectKit } from '../components/Movimientos.jsx';
 import { num } from '../format.js';
 
 const DESTINOS = ['Paciente', 'Consultorio', 'Servicio', 'Venta'];
@@ -62,10 +62,7 @@ function NuevaSalida({ onClose }) {
         <>
           <div className="section-title">Kit por procedimiento</div>
           <div className="toolbar">
-            <select className="select input" value={kit.id} onChange={(e) => setKit((k) => Object.assign({}, k, { id: e.target.value }))} style={{ maxWidth: 320 }}>
-              <option value="">Seleccione un kit…</option>
-              {db.kits.map((k) => <option key={k.id} value={k.id}>{k.codigo} · {k.nombre}</option>)}
-            </select>
+            <div style={{ width: 340, maxWidth: '100%' }}><SelectKit value={kit.id} onChange={(v) => setKit((k) => Object.assign({}, k, { id: v }))} /></div>
             <input className="input num" type="number" min="1" value={kit.veces} onChange={(e) => setKit((k) => Object.assign({}, k, { veces: e.target.value }))} style={{ width: 90 }} title="Número de procedimientos" />
             <Btn icon={Layers} onClick={aplicarKit} disabled={!kit.id}>Agregar insumos del kit</Btn>
           </div>

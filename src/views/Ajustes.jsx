@@ -2,20 +2,11 @@ import { useState } from 'react';
 import { Ban, Plus, SlidersHorizontal, Trash2 } from 'lucide-react';
 import { useStore, C } from '../store.jsx';
 import { Btn, Errores, Field, Kpi, Modal, Nota, Panel, Tabs } from '../components/ui.jsx';
-import { MovTabla, SelectProducto, useRegistrar } from '../components/Movimientos.jsx';
+import { MovTabla, SelectBodega, SelectLote, SelectProducto, useRegistrar } from '../components/Movimientos.jsx';
 import { fecha, money, num, pct } from '../format.js';
 
 const claveLote = (l) => l.productoId + '||' + l.bodega + '||' + l.lote + '||' + l.vence;
 const desdeClave = (k) => { const [productoId, bodega, lote, vence] = String(k || '').split('||'); return { productoId: productoId || '', bodega: bodega || '', lote: lote || '', vence: vence || '' }; };
-
-function OpcionesLotes({ todos }) {
-  const { db, state, hoy } = useStore();
-  return C.lotes(db, state, hoy, { todos }).map((l) => (
-    <option key={claveLote(l)} value={claveLote(l)}>
-      {l.bodega} · {l.producto.codigo} · {l.producto.nombre} · lote {l.lote} · vence {fecha(l.vence)} · {num(l.qty)} {l.producto.unidad}
-    </option>
-  ));
-}
 
 export function NuevaBaja({ onClose, inicial }) {
   const { hoy } = useStore();
@@ -54,7 +45,7 @@ export function NuevaBaja({ onClose, inicial }) {
           <tbody>
             {lineas.map((l, i) => (
               <tr key={i}>
-                <td><select className="select input" value={l.clave} onChange={(e) => setL(i, 'clave', e.target.value)}><option value="">Seleccione…</option><OpcionesLotes /></select></td>
+                <td style={{ minWidth: 380 }}><SelectLote value={l.clave} onChange={(v) => setL(i, 'clave', v)} keyFn={claveLote} todos={false} /></td>
                 <td><input className="input num" type="number" min="0" value={l.cantidad} onChange={(e) => setL(i, 'cantidad', e.target.value)} style={{ width: 110 }} /></td>
                 <td><Btn variant="ghost" size="sm" icon={Trash2} onClick={() => setLineas((ls) => (ls.length > 1 ? ls.filter((_, j) => j !== i) : [{ clave: '', cantidad: '' }]))} /></td>
               </tr>
@@ -109,15 +100,12 @@ function NuevoAjuste({ onClose }) {
             {lineas.map((l, i) => (
               <tr key={i}>
                 <td>
-                  <select className="select input" value={l.clave} onChange={(e) => setL(i, 'clave', e.target.value)}>
-                    <option value="">Seleccione…</option>
-                    <OpcionesLotes todos />
-                    <option value="nuevo">+ Lote que no está en el sistema (sobrante)</option>
-                  </select>
+                  <SelectLote value={l.clave} onChange={(v) => setL(i, 'clave', v)} keyFn={claveLote} todos
+                    extra={[{ value: 'nuevo', label: '+ Lote que no está en el sistema (sobrante)', sub: 'Registrar un lote encontrado en el conteo', search: 'nuevo sobrante' }]} />
                   {l.clave === 'nuevo' && (
                     <div className="form-grid" style={{ marginTop: 8 }}>
                       <SelectProducto value={l.productoId} onChange={(v) => setL(i, 'productoId', v)} />
-                      <select className="select input" value={l.bodega} onChange={(e) => setL(i, 'bodega', e.target.value)}>{db.config.ubicaciones.map((b) => <option key={b}>{b}</option>)}</select>
+                      <SelectBodega value={l.bodega} onChange={(v) => setL(i, 'bodega', v)} />
                       <input className="input mono" placeholder="Lote" value={l.lote} onChange={(e) => setL(i, 'lote', e.target.value)} />
                       <input className="input" type="date" value={l.vence} onChange={(e) => setL(i, 'vence', e.target.value)} />
                     </div>

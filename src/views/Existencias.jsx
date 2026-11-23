@@ -3,6 +3,7 @@ import { Boxes, Download, LayoutGrid, List, PackageSearch, ScanSearch, ScrollTex
 import { useStore, C } from '../store.jsx';
 import { Btn, Chip, Empty, Panel, SearchBox, Tabs } from '../components/ui.jsx';
 import { descargar, fecha, money, num, SEMAFORO } from '../format.js';
+import { SelectGrupo } from '../components/Movimientos.jsx';
 
 const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
@@ -17,7 +18,7 @@ export function calcularExistencias(db, state, hoy, bodega) {
     lots.forEach((l) => { porBodega[l.bodega] = C.r2((porBodega[l.bodega] || 0) + l.qty); });
     const lotes = lots.map((l) => Object.assign({}, l, { sem: C.semaforo(l.vence, hoy, db.config) }))
       .sort((a, b) => ((a.vence || '9999') < (b.vence || '9999') ? -1 : 1));
-    return { p, qty, valor: C.r2(qty * unit), unit, porBodega, lotes, grupo: (db.grupos.find((g) => g.id === p.grupoId) || {}).nombre || '' };
+    return { p, qty, valor: C.r2(qty * unit), unit, porBodega, lotes, grupo: C.rutaGrupo(db, p.grupoId) };
   });
 }
 
@@ -47,7 +48,7 @@ export default function Existencias({ arg }) {
   const lista = calcularExistencias(db, state, hoy, bodega).filter((x) => {
     if (ver === 'existencia' && x.qty <= 0) return false;
     if (ver === 'bajo' && !(Number(x.p.stockMin) > 0 && x.qty < Number(x.p.stockMin))) return false;
-    if (grupo !== 'todos' && x.p.grupoId !== grupo) return false;
+    if (grupo !== 'todos' && !C.gruposDescendientes(db, grupo).has(x.p.grupoId)) return false;
     if (!q) return true;
     const t = norm([x.p.codigo, x.p.nombre, x.p.gtin, x.grupo, ...x.lotes.map((l) => l.lote)].join(' '));
     return norm(q).split(/\s+/).every((w) => t.includes(w));
@@ -75,10 +76,7 @@ export default function Existencias({ arg }) {
         actions={<><Btn icon={Download} onClick={exportar}>Exportar</Btn></>}>
         <div className="toolbar">
           <SearchBox value={q} onChange={setQ} placeholder="Buscar por nombre, código, código de barras o lote" />
-          <select className="select input" value={grupo} onChange={(e) => setGrupo(e.target.value)} style={{ maxWidth: 220 }}>
-            <option value="todos">Todos los grupos</option>
-            {db.grupos.map((g) => <option key={g.id} value={g.id}>{g.nombre}</option>)}
-          </select>
+          <div style={{ width: 280, maxWidth: '100%' }}><SelectGrupo value={grupo} onChange={setGrupo} incluirTodos /></div>
           <Tabs value={ver} onChange={setVer} options={[['existencia', 'Con existencia'], ['bajo', 'Bajo mínimo'], ['todos', 'Todos']]} />
           <span style={{ flex: 1 }} />
           <Tabs value={vista} onChange={setVista} options={[['tarjetas', <><LayoutGrid size={13} /> Tarjetas</>], ['tabla', <><List size={13} /> Tabla</>]]} />

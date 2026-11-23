@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Ban, Check, ClipboardCheck, Eye, Plus, Save } from 'lucide-react';
 import { useStore, C } from '../store.jsx';
 import { Btn, Chip, Empty, Errores, Field, Modal, Nota, Panel } from '../components/ui.jsx';
-import { nombreProducto, useRegistrar } from '../components/Movimientos.jsx';
+import { SelectBodega, nombreProducto, useRegistrar } from '../components/Movimientos.jsx';
 import { fecha, num } from '../format.js';
 
 function NuevoConteo({ onClose }) {
@@ -41,10 +41,7 @@ function NuevoConteo({ onClose }) {
           </select>
         </Field>
         <Field label="Bodega">
-          <select className="select input" value={f.bodega} onChange={set('bodega')}>
-            <option value="todas">Todas las bodegas</option>
-            {db.config.ubicaciones.map((b) => <option key={b}>{b}</option>)}
-          </select>
+          <SelectBodega value={f.bodega} incluirTodas onChange={(v) => setF((x) => Object.assign({}, x, { bodega: v }))} />
         </Field>
         <Field label="Responsable"><input className="input" value={f.responsable} onChange={set('responsable')} /></Field>
         <Field label="Tipo"><label className="check"><input type="checkbox" checked={f.anual} onChange={set('anual')} /> Conteo anual completo (C. de Co. art. 52)</label></Field>

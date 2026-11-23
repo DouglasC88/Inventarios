@@ -4,6 +4,7 @@ import { useStore, C } from '../store.jsx';
 import { Btn, Errores, Field, Modal, Nota, Panel } from '../components/ui.jsx';
 import { MovTabla, SelectBodega, SelectProducto, SelectTercero, useRegistrar } from '../components/Movimientos.jsx';
 import { FormProveedor } from './Proveedores.jsx';
+import Combo from '../components/Combo.jsx';
 import { money, num } from '../format.js';
 
 const lineaVacia = () => ({ productoId: '', lote: '', vence: '', cantidad: '', costoUnit: '', enCompra: false });
@@ -90,10 +91,8 @@ export function NuevaEntrada({ onClose, ordenInicial }) {
       <div className="section-title" style={{ marginTop: 0 }}>1 · Documento de compra</div>
       <div className="form-grid">
         <Field label="Orden de compra" hint="Opcional: trae las cantidades pendientes">
-          <select className="select input" value={h.ordenId} onChange={(e) => elegirOrden(e.target.value)}>
-            <option value="">Sin orden</option>
-            {ordenesAbiertas.map((o) => <option key={o.id} value={o.id}>{o.num} · {(db.proveedores.find((p) => p.id === o.proveedorId) || {}).nombre}</option>)}
-          </select>
+          <Combo value={h.ordenId} onChange={elegirOrden} placeholder="Escriba el número de orden o el proveedor…"
+            options={[{ value: '', label: 'Sin orden de compra', sub: 'Compra directa' }, ...ordenesAbiertas.map((o) => ({ value: o.id, label: o.num + ' · ' + ((db.proveedores.find((p) => p.id === o.proveedorId) || {}).nombre || ''), sub: 'Entrega ' + o.fechaEntrega + ' · ' + C.estadoOrden(db, o).estado }))]} />
         </Field>
         <Field label="Fecha"><input className="input" type="date" value={h.fecha} max={hoy} onChange={setHk('fecha')} /></Field>
         <Field label="Bodega que recibe"><SelectBodega value={h.bodega} onChange={(v) => setH((x) => Object.assign({}, x, { bodega: v }))} /></Field>

@@ -3,6 +3,7 @@ import { Plus, Snowflake, Thermometer } from 'lucide-react';
 import { useStore, C } from '../store.jsx';
 import { Btn, Chip, Empty, Errores, Field, Kpi, Modal, Nota, Panel } from '../components/ui.jsx';
 import { fechaHora, num } from '../format.js';
+import { SelectBodega } from '../components/Movimientos.jsx';
 
 function NuevaLectura({ onClose }) {
   const { db, commit, toast } = useStore();
@@ -27,7 +28,7 @@ function NuevaLectura({ onClose }) {
       <Errores lista={err} />
       <div className="form-grid">
         <Field label="Fecha y hora"><input className="input" type="datetime-local" value={f.fecha} onChange={set('fecha')} /></Field>
-        <Field label="Ubicación"><select className="select input" value={f.ubicacion} onChange={set('ubicacion')}>{db.config.ubicaciones.map((u) => <option key={u}>{u}</option>)}</select></Field>
+        <Field label="Ubicación"><SelectBodega value={f.ubicacion} onChange={(v) => setF((x) => Object.assign({}, x, { ubicacion: v }))} /></Field>
         <Field label="Temperatura (°C)" hint={'Rango permitido ' + db.config.frio.min + ' a ' + db.config.frio.max + ' °C'}><input className="input" type="number" step="0.1" value={f.temp} onChange={set('temp')} autoFocus /></Field>
         <Field label="Responsable"><input className="input" value={f.responsable} onChange={set('responsable')} /></Field>
         <Field label="Observaciones" full><input className="input" value={f.nota} onChange={set('nota')} /></Field>

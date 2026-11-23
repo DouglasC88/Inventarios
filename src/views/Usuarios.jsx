@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { KeyRound, Pencil, Plus, UsersRound } from 'lucide-react';
 import { useStore, C } from '../store.jsx';
 import { Btn, Chip, Empty, Errores, Field, Modal, Nota, Panel } from '../components/ui.jsx';
+import { SelectBodega } from '../components/Movimientos.jsx';
 
 const PERM_TEXTO = {
   admin: 'Todo, incluidos usuarios, configuración e importación.',
@@ -52,7 +53,7 @@ function FormUsuario({ inicial, onClose }) {
         </Field>
         {f.rol === 'consultorio' && (
           <Field label="Bodega o consultorio">
-            <select className="select input" value={f.bodega} onChange={set('bodega')}><option value="">Seleccione…</option>{db.config.ubicaciones.map((b) => <option key={b}>{b}</option>)}</select>
+            <SelectBodega value={f.bodega} onChange={(v) => setF((x) => Object.assign({}, x, { bodega: v }))} />
           </Field>
         )}
         <Field label={f.id ? 'Nuevo PIN (opcional)' : 'PIN'}><input className="input mono" type="password" inputMode="numeric" value={f.pin} onChange={set('pin')} autoComplete="new-password" /></Field>

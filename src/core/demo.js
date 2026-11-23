@@ -23,17 +23,29 @@ export function crearDemo(hoy) {
     { id: 'b4', codigo: 'NV', nombre: NV, tipo: 'nevera', responsable: 'Auxiliar de odontología', sede: 'Sede principal', activa: true }
   ];
   C.sincronizarBodegas(db);
+  const G = (id, codigo, nombre, parentId, descripcion) => ({ id, codigo, nombre, parentId: parentId || '', descripcion: descripcion || '' });
   db.grupos = [
-    { id: 'g1', codigo: 'RES', nombre: 'Resinas y adhesivos', descripcion: 'Materiales de restauración directa' },
-    { id: 'g2', codigo: 'ANE', nombre: 'Anestésicos', descripcion: 'Anestésicos locales y tópicos' },
-    { id: 'g3', codigo: 'BIO', nombre: 'Bioseguridad', descripcion: 'Guantes, tapabocas, campos y barreras' },
-    { id: 'g4', codigo: 'IMP', nombre: 'Implantología', descripcion: 'Implantes y componentes protésicos' },
-    { id: 'g5', codigo: 'ROT', nombre: 'Instrumental rotatorio', descripcion: 'Fresas y piedras' },
-    { id: 'g6', codigo: 'IMR', nombre: 'Impresión', descripcion: 'Alginatos y siliconas' },
-    { id: 'g7', codigo: 'DES', nombre: 'Desinfección y endodoncia', descripcion: 'Irrigantes y desinfectantes' },
-    { id: 'g8', codigo: 'PRO', nombre: 'Profilaxis', descripcion: 'Cepillos, copas y pastas' },
-    { id: 'g9', codigo: 'AGU', nombre: 'Agujas y jeringas', descripcion: 'Agujas dentales y carpules' }
+    G('l1', '01', 'Operatoria y restauración'),
+    G('g11', '0101', 'Resinas y adhesivos', 'l1'),
+    G('s111', '010101', 'Resinas compuestas', 'g11'),
+    G('s112', '010102', 'Adhesivos', 'g11'),
+    G('g12', '0102', 'Ionómeros y cementos', 'l1'),
+    G('l2', '02', 'Anestesia'),
+    G('g21', '0201', 'Anestésicos locales', 'l2'),
+    G('g22', '0202', 'Agujas y carpules', 'l2'),
+    G('l3', '03', 'Bioseguridad'),
+    G('g31', '0301', 'Guantes', 'l3'),
+    G('l4', '04', 'Cirugía e implantología'),
+    G('g41', '0401', 'Implantes', 'l4'),
+    G('l5', '05', 'Instrumental'),
+    G('g51', '0501', 'Fresas y rotatorio', 'l5'),
+    G('l6', '06', 'Impresión y modelos'),
+    G('g61', '0601', 'Alginatos', 'l6'),
+    G('l7', '07', 'Higiene, profilaxis y desinfección'),
+    G('g71', '0701', 'Profilaxis', 'l7'),
+    G('g72', '0702', 'Desinfectantes e irrigantes', 'l7')
   ];
+
 
   db.usuarios = USUARIOS_DEMO.map(([usuario, nombre, rol, pin, bodega]) => ({
     id: 'u-' + usuario, usuario, nombre, rol, bodega, activo: true, pinHash: C.hashPin(usuario, pin)
@@ -56,17 +68,17 @@ export function crearDemo(hoy) {
   }, extra || {});
 
   db.productos = [
-    P('p1', 'RES-A3', 'Resina compuesta tono A3, jeringa 4 g', 'dispositivo', 'IIa', 'jeringa', 10, { invima: 'INVIMA 2021DM-0012345', invimaVence: d(1100), gtin: '07701234500025', unidadCompra: 'caja x6', factorCompra: 6, leadTime: 5, grupoId: 'g1' }),
-    P('p2', 'GUA-NIT-M', 'Guantes de nitrilo talla M, caja x100', 'dispositivo', 'I', 'caja', 15, { invima: 'INVIMA 2019DM-0004567', invimaVence: d(60), leadTime: 3, grupoId: 'g3' }),
-    P('p3', 'LID-2E', 'Lidocaína 2 % con epinefrina, cartucho 1,8 mL', 'medicamento', 'N/A', 'cartucho', 60, { invima: 'INVIMA 2020M-0011223', invimaVence: d(800), unidadCompra: 'caja x50', factorCompra: 50, proveedorId: 'pv2', leadTime: 10, grupoId: 'g2' }),
-    P('p4', 'HIP-525', 'Hipoclorito de sodio 5,25 %, frasco 1 L', 'insumo', 'N/A', 'frasco', 6, { proveedorId: 'pv3', leadTime: 2, grupoId: 'g7' }),
-    P('p5', 'ION-VID', 'Ionómero de vidrio restaurador, kit', 'dispositivo', 'IIa', 'kit', 3, { invima: 'INVIMA 2022DM-0020001', invimaVence: d(1400), grupoId: 'g1' }),
-    P('p6', 'AGU-30G', 'Aguja dental corta 30G', 'dispositivo', 'IIa', 'unidad', 100, { invima: 'INVIMA 2018DM-0003210', invimaVence: d(500), unidadCompra: 'caja x100', factorCompra: 100, proveedorId: 'pv2', grupoId: 'g9' }),
-    P('p7', 'IMP-410', 'Implante dental 4,1 x 10 mm', 'dispositivo', 'III', 'unidad', 4, { invima: 'INVIMA 2023DM-0031415', invimaVence: d(1600), gtin: '07701234500018', proveedorId: 'pv2', leadTime: 15, grupoId: 'g4' }),
-    P('p8', 'ALG-450', 'Alginato de fraguado normal, 450 g', 'dispositivo', 'I', 'bolsa', 5, { invima: 'INVIMA 2020DM-0009988', invimaVence: d(900), vnrUnit: 22000, grupoId: 'g6' }),
-    P('p9', 'ADH-UNI', 'Adhesivo universal, frasco 5 mL', 'dispositivo', 'IIa', 'frasco', 3, { invima: 'INVIMA 2021DM-0016161', invimaVence: d(1200), cadenaFrio: true, ubicacion: NV, proveedorId: 'pv2', grupoId: 'g1' }),
-    P('p10', 'FRE-DIA', 'Fresas de diamante surtidas, x10', 'dispositivo', 'I', 'paquete', 4, { invima: 'INVIMA 2017DM-0001122', invimaVence: d(700), grupoId: 'g5' }),
-    P('p11', 'CEP-IMP', 'Cepillo de profilaxis', 'insumo', 'N/A', 'unidad', 40, { unidadCompra: 'bolsa x50', factorCompra: 50, leadTime: 4, grupoId: 'g8' })
+    P('p1', 'RES-A3', 'Resina compuesta tono A3, jeringa 4 g', 'dispositivo', 'IIa', 'jeringa', 10, { invima: 'INVIMA 2021DM-0012345', invimaVence: d(1100), gtin: '07701234500025', unidadCompra: 'caja x6', factorCompra: 6, leadTime: 5, grupoId: 's111', marca: 'Marca A', referencia: 'RA3-4G', presentacion: 'Jeringa 4 g', tipoMaterial: 'consumible', ubicacionFisica: 'Estante A-1', stockMax: 40 }),
+    P('p2', 'GUA-NIT-M', 'Guantes de nitrilo talla M, caja x100', 'dispositivo', 'I', 'caja', 15, { invima: 'INVIMA 2019DM-0004567', invimaVence: d(60), leadTime: 3, grupoId: 'g31', marca: 'Marca B', referencia: 'NIT-M-100', presentacion: 'Caja x100 unidades', tipoMaterial: 'consumible', ubicacionFisica: 'Estante B-2', stockMax: 60 }),
+    P('p3', 'LID-2E', 'Lidocaína 2 % con epinefrina, cartucho 1,8 mL', 'medicamento', 'N/A', 'cartucho', 60, { invima: 'INVIMA 2020M-0011223', invimaVence: d(800), unidadCompra: 'caja x50', factorCompra: 50, proveedorId: 'pv2', leadTime: 10, grupoId: 'g21', marca: 'Marca C', presentacion: 'Cartucho 1,8 mL', tipoMaterial: 'medicamento', cum: '19900000-01', ubicacionFisica: 'Gabinete medicamentos', stockMax: 600 }),
+    P('p4', 'HIP-525', 'Hipoclorito de sodio 5,25 %, frasco 1 L', 'insumo', 'N/A', 'frasco', 6, { proveedorId: 'pv3', leadTime: 2, grupoId: 'g72' , presentacion: 'Frasco 1 L', tipoMaterial: 'consumible', ubicacionFisica: 'Estante D-1', stockMax: 20 }),
+    P('p5', 'ION-VID', 'Ionómero de vidrio restaurador, kit', 'dispositivo', 'IIa', 'kit', 3, { invima: 'INVIMA 2022DM-0020001', invimaVence: d(1400), grupoId: 'g12', marca: 'Marca A', presentacion: 'Kit polvo + líquido', tipoMaterial: 'consumible', stockMax: 10 }),
+    P('p6', 'AGU-30G', 'Aguja dental corta 30G', 'dispositivo', 'IIa', 'unidad', 100, { invima: 'INVIMA 2018DM-0003210', invimaVence: d(500), unidadCompra: 'caja x100', factorCompra: 100, proveedorId: 'pv2', grupoId: 'g22', marca: 'Marca C', presentacion: 'Aguja 30G corta', tipoMaterial: 'consumible', stockMax: 1500 }),
+    P('p7', 'IMP-410', 'Implante dental 4,1 x 10 mm', 'dispositivo', 'III', 'unidad', 4, { invima: 'INVIMA 2023DM-0031415', invimaVence: d(1600), gtin: '07701234500018', proveedorId: 'pv2', leadTime: 15, grupoId: 'g41', marca: 'Marca D', referencia: 'IMP-4110', presentacion: 'Unidad estéril', tipoMaterial: 'dispositivo', ubicacionFisica: 'Vitrina implantes', stockMax: 12 }),
+    P('p8', 'ALG-450', 'Alginato de fraguado normal, 450 g', 'dispositivo', 'I', 'bolsa', 5, { invima: 'INVIMA 2020DM-0009988', invimaVence: d(900), vnrUnit: 22000, grupoId: 'g61', marca: 'Marca B', presentacion: 'Bolsa 450 g', tipoMaterial: 'consumible', stockMax: 20 }),
+    P('p9', 'ADH-UNI', 'Adhesivo universal, frasco 5 mL', 'dispositivo', 'IIa', 'frasco', 3, { invima: 'INVIMA 2021DM-0016161', invimaVence: d(1200), cadenaFrio: true, ubicacion: NV, proveedorId: 'pv2', grupoId: 's112', marca: 'Marca A', presentacion: 'Frasco 5 mL', tipoMaterial: 'consumible', ubicacionFisica: 'Nevera, bandeja 1', stockMax: 10 }),
+    P('p10', 'FRE-DIA', 'Fresas de diamante surtidas, x10', 'dispositivo', 'I', 'paquete', 4, { invima: 'INVIMA 2017DM-0001122', invimaVence: d(700), grupoId: 'g51', marca: 'Marca E', presentacion: 'Paquete x10', tipoMaterial: 'instrumental', controlaVence: false, stockMax: 12 }),
+    P('p11', 'CEP-IMP', 'Cepillo de profilaxis', 'insumo', 'N/A', 'unidad', 40, { unidadCompra: 'bolsa x50', factorCompra: 50, leadTime: 4, grupoId: 'g71' , presentacion: 'Unidad', tipoMaterial: 'consumible', stockMax: 150 })
   ];
 
   db.kits = [

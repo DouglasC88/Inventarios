@@ -272,3 +272,54 @@ test('dígito de verificación del NIT (DIAN)', () => {
   assert.equal(t.dv, '4');
   assert.equal(C.documentoTercero(t), 'NIT 800.197.268-4');
 });
+
+test('clasificación jerárquica Línea › Grupo › Subgrupo', () => {
+  const db = base();
+  db.grupos = [
+    { id: 'l1', codigo: '01', nombre: 'Operatoria' },
+    { id: 'g1', codigo: '0101', nombre: 'Resinas', parentId: 'l1' },
+    { id: 's1', codigo: '010101', nombre: 'Resinas fluidas', parentId: 'g1' },
+    { id: 'l2', codigo: '02', nombre: 'Cirugía' }
+  ];
+  assert.equal(C.rutaGrupo(db, 's1'), 'Operatoria › Resinas › Resinas fluidas');
+  assert.equal(C.nivelGrupo(db, db.grupos[2]), 3);
+  assert.deepEqual([...C.gruposDescendientes(db, 'l1')].sort(), ['g1', 'l1', 's1']);
+  assert.deepEqual(C.arbolGrupos(db).map((g) => g.id), ['l1', 'g1', 's1', 'l2']);
+});
+
+test('líneas de movimiento filtradas para reportes', () => {
+  const db = base();
+  db.grupos = [{ id: 'l1', nombre: 'L' }, { id: 'g1', nombre: 'G', parentId: 'l1' }];
+  db.productos[0].grupoId = 'g1';
+  add(db, ent('2026-01-10', [{ productoId: 'a', lote: 'L1', vence: '2027-01-01', cantidad: 10, costoUnit: 100 }]));
+  add(db, { tipo: 'salida', fecha: '2026-02-01', destino: 'X', lineas: [{ productoId: 'a', lote: 'L1', vence: '2027-01-01', cantidad: 4 }] });
+  const st = C.replay(db);
+  const todas = C.lineasMovimiento(db, st, { grupoId: 'l1' });
+  assert.equal(todas.length, 2);
+  assert.deepEqual(todas.map((x) => x.efecto), [10, -4]);
+  assert.equal(C.lineasMovimiento(db, st, { desde: '2026-01-15', tipos: ['salida'] })[0].valor, 400);
+  assert.equal(C.lineasMovimiento(db, st, { terceroId: 'pv' }).length, 1);
+});
+
+test('producto sin control de vencimiento no exige fecha', () => {
+  const db = base();
+  db.productos[0].controlaVence = false;
+  const e = C.validarMovimiento(db, ent('2026-03-01', [{ productoId: 'a', lote: 'S/L', vence: '', cantidad: 2, costoUnit: 5 }]), HOY);
+  assert.deepEqual(e, []);
+});
+
+test('los 32 reportes se generan sin error con los datos de demostración', async () => {
+  const { REPORTES, filtrosIniciales } = await import('../src/core/reportes.js');
+  const db = crearDemo(HOY);
+  const ctx = { db, state: C.replay(db), hoy: HOY };
+  const f = Object.assign(filtrosIniciales(HOY), { producto: 'p1', desde: '2026-01-01' });
+  assert.ok(REPORTES.length >= 30);
+  for (const r of REPORTES) {
+    const filas = r.filas(ctx, f);
+    assert.ok(Array.isArray(filas), r.id);
+    filas.forEach((fila) => r.cols.forEach(([k]) => assert.ok(k in fila, r.id + ' sin columna ' + k)));
+  }
+  const ex = REPORTES.find((r) => r.id === 'existencias-bodega').filas(ctx, Object.assign({}, f, { producto: '' }));
+  const total = ex.reduce((s, x) => s + x.valor, 0);
+  assert.ok(Math.abs(total - C.valorInventario(ctx.state)) < 1, 'existencias por bodega cuadra con el valor del inventario');
+});

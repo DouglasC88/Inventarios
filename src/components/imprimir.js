@@ -50,3 +50,16 @@ export function imprimirOrden(db, orden, estado) {
     <p>Todo despacho debe acompañarse de factura electrónica, lote y fecha de vencimiento de cada producto, y registro sanitario INVIMA vigente.</p>
     <div class="firmas"><div>Elaboró</div><div>Aprobó</div></div>`);
 }
+
+/** Imprime (o guarda en PDF) cualquier reporte en formato de tabla. */
+export function imprimirTabla(db, titulo, filtros, cols, filas, total) {
+  const th = cols.map((c) => `<th class="${c.num ? 'n' : ''}">${esc(c.t)}</th>`).join('');
+  const tr = filas.map((r) => '<tr>' + r.map((v, i) => `<td class="${cols[i].num ? 'n' : ''}">${esc(v)}</td>`).join('') + '</tr>').join('');
+  const tf = total ? '<tfoot><tr>' + total.map((v, i) => `<td class="${cols[i].num ? 'n' : ''}"><b>${esc(v)}</b></td>`).join('') + '</tr></tfoot>' : '';
+  ventana(titulo, `
+    <h1>${esc(titulo)}</h1>
+    <div class="emp">${esc(db.config.empresa.nombre)} · NIT ${esc(db.config.empresa.nit)} · generado el ${esc(new Date().toLocaleString('es-CO'))}</div>
+    ${filtros ? `<p style="color:#555">${esc(filtros)}</p>` : ''}
+    <table><thead><tr>${th}</tr></thead><tbody>${tr}</tbody>${tf}</table>
+    <p style="color:#777;margin-top:16px">${filas.length} filas · NOVA Inventario</p>`);
+}

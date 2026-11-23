@@ -227,6 +227,77 @@ function bodegaEnUso(db, nombre) {
     db.requisiciones.some((q) => q.bodegaSolicita === nombre || q.bodegaAtiende === nombre);
 }
 
+// ---------- Clasificación (Línea › Grupo › Subgrupo) ----------
+const NIVELES_GRUPO = { 1: 'Línea', 2: 'Grupo', 3: 'Subgrupo' };
+const TIPOS_MATERIAL = {
+  consumible: 'Insumo consumible', dispositivo: 'Dispositivo médico', medicamento: 'Medicamento',
+  instrumental: 'Instrumental reutilizable', repuesto: 'Repuesto o accesorio de equipo', activo: 'Activo menor / dotación'
+};
+function nivelGrupo(db, g) {
+  let n = 1, x = g, guard = 0;
+  while (x && x.parentId && guard++ < 10) { x = db.grupos.find((y) => y.id === x.parentId); if (x) n++; }
+  return n;
+}
+function rutaGrupo(db, id) {
+  const partes = [];
+  let x = db.grupos.find((g) => g.id === id), guard = 0;
+  while (x && guard++ < 10) { partes.unshift(x.nombre); x = x.parentId ? db.grupos.find((g) => g.id === x.parentId) : null; }
+  return partes.join(' › ');
+}
+function gruposDescendientes(db, id) {
+  const out = new Set([id]);
+  let cambio = true;
+  while (cambio) {
+    cambio = false;
+    db.grupos.forEach((g) => { if (g.parentId && out.has(g.parentId) && !out.has(g.id)) { out.add(g.id); cambio = true; } });
+  }
+  return out;
+}
+/** Grupos ordenados como árbol (padre antes que hijos). */
+function arbolGrupos(db) {
+  const out = [];
+  const visitar = (padre, nivel) => db.grupos.filter((g) => (g.parentId || '') === padre)
+    .sort((a, b) => String(a.codigo).localeCompare(String(b.codigo)))
+    .forEach((g) => { out.push(Object.assign({}, g, { nivel, ruta: rutaGrupo(db, g.id) })); visitar(g.id, nivel + 1); });
+  visitar('', 1);
+  db.grupos.filter((g) => !out.some((x) => x.id === g.id)).forEach((g) => out.push(Object.assign({}, g, { nivel: 1, ruta: g.nombre })));
+  return out;
+}
+
+// ---------- Movimientos línea a línea (base de los reportes) ----------
+function lineasMovimiento(db, state, f) {
+  f = f || {};
+  const out = [];
+  const grupos = f.grupoId ? gruposDescendientes(db, f.grupoId) : null;
+  for (const m of ordenar(db.movimientos)) {
+    if (!f.incluirAnulados && m.anulado) continue;
+    if (f.desde && m.fecha < f.desde) continue;
+    if (f.hasta && m.fecha > f.hasta) continue;
+    if (f.tipos && !f.tipos.includes(m.tipo)) continue;
+    if (f.terceroId && m.proveedorId !== f.terceroId) continue;
+    const c = state.movCost[m.id];
+    m.lineas.forEach((l, i) => {
+      const p = db.productos.find((x) => x.id === l.productoId);
+      if (f.productoId && l.productoId !== f.productoId) return;
+      if (grupos && (!p || !grupos.has(p.grupoId))) return;
+      const bodega = m.tipo === 'traslado' ? bodegaDe(m, db.config) : (l.bodega || bodegaDe(m, db.config));
+      if (f.bodega && bodega !== f.bodega && m.bodegaDestino !== f.bodega) return;
+      const q = Number(l.cantidad);
+      const signo = m.tipo === 'traslado' ? 0 : (ENTRAN.includes(m.tipo) || (m.tipo === 'ajuste' && q > 0)) ? 1 : -1;
+      out.push({
+        movId: m.id, num: m.num, fecha: m.fecha, tipo: m.tipo, anulado: !!m.anulado, bodega, bodegaDestino: m.bodegaDestino || '',
+        productoId: l.productoId, codigo: p ? p.codigo : '', producto: p ? p.nombre : '', grupoId: p ? p.grupoId : '', unidad: p ? p.unidad : '',
+        lote: l.lote, vence: l.vence, cantidad: Math.abs(q), efecto: signo * Math.abs(q),
+        unit: c ? c.lineas[i].unit : 0, valor: c ? c.lineas[i].valor : 0,
+        terceroId: m.proveedorId || '', docTipo: m.docTipo || '', docNum: m.docNum || '', ordenNum: m.ordenNum || '',
+        destinoTipo: m.destinoTipo || '', destino: m.destino || '', procedimiento: m.procedimiento || '',
+        causa: m.tipo === 'ajuste' ? l.causa : (m.causa || ''), acta: m.acta || '', usuario: m.usuario || ''
+      });
+    });
+  }
+  return out;
+}
+
 // ---------- Maestro de lotes ----------
 const ESTADOS_LOTE = { liberado: 'Liberado', cuarentena: 'En cuarentena', bloqueado: 'Bloqueado' };
 const claveLote = (productoId, lote) => productoId + '|' + String(lote || '').trim().toUpperCase();
@@ -527,11 +598,13 @@ function validarMovimiento(db, mov, hoy) {
     const q = Number(l.cantidad);
     if (!isFinite(q) || q === 0) e.push(n + 'la cantidad debe ser distinta de cero.');
     if (mov.tipo !== 'ajuste' && q < 0) e.push(n + 'la cantidad debe ser positiva.');
-    if (!String(l.lote || '').trim()) e.push(n + 'el lote es obligatorio (trazabilidad y tecnovigilancia).');
+    const conLote = p.controlaLote !== false;
+    const conVence = p.controlaVence !== false;
+    if (conLote && !String(l.lote || '').trim()) e.push(n + 'el lote es obligatorio (trazabilidad y tecnovigilancia).');
     if (l.vence && !isISODate(l.vence)) e.push(n + 'la fecha de vencimiento no es válida.');
     const entra = ENTRAN.includes(mov.tipo) || (mov.tipo === 'ajuste' && q > 0);
     if (entra) {
-      if (!l.vence) e.push(n + 'la fecha de vencimiento es obligatoria.');
+      if (conVence && !l.vence) e.push(n + 'la fecha de vencimiento es obligatoria.');
       if (mov.tipo === 'entrada' && l.vence && isISODate(mov.fecha) && l.vence <= mov.fecha) e.push(n + p.nombre + ' viene vencido; no se puede recibir.');
       if (l.costoUnit !== undefined && l.costoUnit !== '' && Number(l.costoUnit) < 0) e.push(n + 'el costo no puede ser negativo.');
       if (ENTRAN.includes(mov.tipo) && (l.costoUnit === undefined || l.costoUnit === '' || !isFinite(Number(l.costoUnit)))) e.push(n + 'indique el costo unitario.');
@@ -1099,6 +1172,7 @@ function csv(filas) {
 }
 
 export {
+  NIVELES_GRUPO, TIPOS_MATERIAL, nivelGrupo, rutaGrupo, gruposDescendientes, arbolGrupos, lineasMovimiento,
   TIPOS_DOC, TIPOS_TERCERO, calcularDV, documentoTercero, normalizarTercero,
   TIPOS_BODEGA, sincronizarBodegas, renombrarBodega, bodegaEnUso,
   ESTADOS_LOTE, claveLote, buscarLote, asegurarLotes,

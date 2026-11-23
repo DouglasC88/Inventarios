@@ -128,10 +128,10 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
 .main { min-width: 0; padding: 20px 28px 60px; }
 .topbar { display: flex; align-items: center; gap: 16px; margin-bottom: 22px; }
-.topbar h1 { margin: 0; font-family: var(--brand); font-size: 20px; letter-spacing: 0.08em; font-weight: 700; }
+.topbar h1 { white-space: nowrap; margin: 0; font-family: var(--brand); font-size: 20px; letter-spacing: 0.08em; font-weight: 700; }
 .topbar .crumb { font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--cyan-text); }
 .topbar .spacer { flex: 1; }
-.clock { font-family: var(--mono); font-size: 13px; color: var(--muted); padding: 8px 12px; border-radius: 12px; border: 1px solid var(--line); background: #fff; box-shadow: var(--glow-soft); }
+.clock { white-space: nowrap; font-family: var(--mono); font-size: 13px; color: var(--muted); padding: 8px 12px; border-radius: 12px; border: 1px solid var(--line); background: #fff; box-shadow: var(--glow-soft); }
 .clock b { color: var(--cyan-text); font-weight: 600; }
 .btn.menu-btn { display: none; }
 .pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 10px var(--green); display: inline-block; animation: pulse 1.8s ease-in-out infinite; }
@@ -448,3 +448,16 @@ div.input { background: #f6f9fd; }
 /* ---------- Buscador general ---------- */
 .gsearch { flex: 1; min-width: 300px; max-width: 560px; }
 @media (max-width: 860px) { .gsearch { max-width: none; min-width: 0; } }
+
+/* ---------- Reportes ---------- */
+.rep-list { display: grid; gap: 6px; }
+.rep-item { display: flex; align-items: center; gap: 10px; justify-content: space-between; text-align: left; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: #fff; cursor: pointer; font: inherit; color: inherit; transition: all 0.15s ease; }
+.rep-item:hover { border-color: var(--cyan); box-shadow: 0 0 0 1px rgba(0, 194, 255, 0.35), 0 0 14px rgba(0, 194, 255, 0.2); }
+.rep-item b { display: block; font-size: 13.5px; }
+.rep-item span { display: block; font-size: 12px; color: var(--muted); }
+.rep-item svg { color: var(--cyan-2); flex-shrink: 0; }
+.rep-filtros { margin-top: 4px; }
+.with-clear { display: flex; gap: 6px; align-items: center; }
+.with-clear > button { border: 1px solid var(--line); background: #fff; border-radius: 10px; width: 34px; height: 38px; cursor: pointer; color: var(--muted); font-size: 18px; }
+.with-clear > button:hover { color: var(--red); border-color: var(--red); }
+.tbl tr.arbol.n1 td { background: rgba(124, 58, 237, 0.03); }

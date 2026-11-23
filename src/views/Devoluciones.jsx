@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Plus, Trash2, Undo2 } from 'lucide-react';
 import { useStore, C } from '../store.jsx';
 import { Btn, Errores, Field, Modal, Nota, Panel } from '../components/ui.jsx';
-import { MovTabla, SelectBodega, SelectTercero, useRegistrar } from '../components/Movimientos.jsx';
+import { MovTabla, SelectBodega, SelectLote, SelectTercero, useRegistrar } from '../components/Movimientos.jsx';
 import { fecha, num } from '../format.js';
 
 function NuevaDevolucion({ onClose }) {
@@ -53,10 +53,9 @@ function NuevaDevolucion({ onClose }) {
             {lineas.map((l, i) => (
               <tr key={i}>
                 <td>
-                  <select className="select input" value={l.clave} onChange={(e) => setL(i, 'clave', e.target.value)}>
-                    <option value="">Seleccione…</option>
-                    {opciones.map((o) => <option key={o.productoId + o.lote + o.vence} value={o.productoId + '||' + o.lote + '||' + o.vence}>{o.producto.codigo} · {o.producto.nombre} · lote {o.lote} · vence {fecha(o.vence)} · {num(o.qty)}</option>)}
-                  </select>
+                  <SelectLote value={l.clave} onChange={(v) => setL(i, 'clave', v)} bodega={h.bodega}
+                    keyFn={(o) => o.productoId + '||' + o.lote + '||' + o.vence}
+                    filtro={(o) => lotesProv.has(o.productoId + '||' + o.lote.toUpperCase())} />
                 </td>
                 <td><input className="input num" type="number" min="0" value={l.cantidad} onChange={(e) => setL(i, 'cantidad', e.target.value)} style={{ width: 110 }} /></td>
                 <td><Btn variant="ghost" size="sm" icon={Trash2} onClick={() => setLineas((ls) => (ls.length > 1 ? ls.filter((_, j) => j !== i) : [{ clave: '', cantidad: '' }]))} /></td>

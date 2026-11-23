@@ -3,6 +3,7 @@ import { Ban, CalendarClock, Download } from 'lucide-react';
 import { useStore, C } from '../store.jsx';
 import { Btn, Chip, Empty, Kpi, Panel, SearchBox, Tabs } from '../components/ui.jsx';
 import { NuevaBaja } from './Ajustes.jsx';
+import { SelectBodega } from '../components/Movimientos.jsx';
 import { descargar, fecha, num, SEMAFORO } from '../format.js';
 
 export default function Lotes() {
@@ -33,9 +34,7 @@ export default function Lotes() {
         actions={<Btn icon={Download} onClick={exportar}>Exportar</Btn>}>
         <div className="toolbar">
           <SearchBox value={q} onChange={setQ} placeholder="Buscar producto o lote" />
-          <select className="select input" value={bodega} onChange={(e) => setBodega(e.target.value)} style={{ maxWidth: 220 }}>
-            <option value="todas">Todas las bodegas</option>{db.config.ubicaciones.map((b) => <option key={b}>{b}</option>)}
-          </select>
+          <div style={{ width: 240 }}><SelectBodega value={bodega} incluirTodas onChange={setBodega} /></div>
           <Tabs value={filtro} onChange={setFiltro} options={[['todos', 'Todos'], ['vencido', 'Vencidos'], ['rojo', 'Rojo'], ['amarillo', 'Amarillo'], ['verde', 'Verde']]} />
         </div>
         {lista.length ? (

@@ -28,12 +28,12 @@ Aplicación JavaScript (React + Vite) con interfaz futurista tipo HUD en blanco 
 | | Lotes y vencimientos | Semáforo por bodega y baja de vencidos | Res. 1403/2007 |
 | | Trazabilidad | Proveedor, factura, bodega y paciente de cada lote | Res. 4816/2008 |
 | | Cadena de frío | Registro de temperaturas y alertas fuera de rango | Res. 3100/2019 |
-| | Reportes | Inventario valorado a cualquier fecha, ABC, rotación, consumos por destino, sin movimiento, libro de movimientos | Kardex tipo A2 |
+| Reportes | Centro de reportes | 32 reportes en 7 categorías (inventario, movimientos, compras, consumos, vencimientos y calidad, análisis, control), con filtros, totales, orden por columna, Excel e impresión/PDF | A2 / SAP |
 | | Cierres | Bloqueo del periodo y deterioro por valor neto realizable con reversión | NIC 2 / Secc. 13 |
 | Maestros | Bodegas | Bodega principal, consultorios, neveras, cuarentena y sedes: código, tipo, responsable; cambio de nombre en cascada | Res. 3100/2019 (almacenamiento) |
-| | Grupos de productos | Líneas o familias para filtrar y analizar valor | Grupos tipo A2 / SAP |
+| | Clasificación | Árbol Línea › Grupo › Subgrupo; filtros y reportes incluyen los niveles inferiores | Clasificación tipo A2 / SAP |
 | | Lotes | Maestro de lotes con fabricación, vencimiento y estado (liberado, cuarentena, bloqueado) | Res. 1403/2007, Res. 4816/2008 |
-| | Productos | Ficha sanitaria (INVIMA, riesgo, GTIN, cadena de frío), unidad de compra, proveedor preferido | Res. 3100/2019, Dec. 4725/2005 |
+| | Productos | Ficha completa: clasificación, tipo de material, marca, referencia, presentación, código alterno, ubicación física, mínimo y máximo, IVA, precio, CUM, control de lote y vencimiento; ficha sanitaria (INVIMA, riesgo, GTIN, cadena de frío), unidad de compra, proveedor preferido | Res. 3100/2019, Dec. 4725/2005 |
 | | Kits por procedimiento | Insumos por procedimiento odontológico | — |
 | | Terceros | Proveedores, clientes, pacientes y empleados con NIT o documento y dígito de verificación DIAN; régimen de IVA y facturación | ET art. 771-2, Res. DIAN |
 | Sistema | Importar | Productos y saldo inicial desde Excel (.xlsx) o CSV | Migración desde A2 u otros |

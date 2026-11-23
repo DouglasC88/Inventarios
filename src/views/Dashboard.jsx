@@ -1,4 +1,4 @@
-import { Activity, ArrowRightLeft, Boxes, CalendarClock, Compass, Layers, PackageMinus, PackagePlus, ShieldCheck, ShoppingCart, Tags, TrendingDown, TriangleAlert, Wallet, Warehouse } from 'lucide-react';
+import { Activity, ArrowRightLeft, BarChart3, Boxes, CalendarClock, Compass, Layers, PackageMinus, PackagePlus, ShieldCheck, ShoppingCart, Tags, TrendingDown, TriangleAlert, Wallet, Warehouse } from 'lucide-react';
 import { useStore, C } from '../store.jsx';
 import { Btn, Chip, Gauge, Kpi, Panel, Empty } from '../components/ui.jsx';
 import { money, num, pct, fecha, TONO_MOV } from '../format.js';
@@ -16,6 +16,7 @@ export default function Dashboard() {
     ['Nuevo lote', Tags, 'lotes', 'maestros'],
     ['Nueva bodega', Warehouse, 'bodegas', 'config']
   ].filter((a) => puede(a[3]));
+  const lineas = C.arbolGrupos(db).filter((g) => g.nivel === 1);
   const year = C.yearOf(hoy);
   const valor = C.valorInventario(state);
   const ls = C.lotes(db, state, hoy);
@@ -28,9 +29,9 @@ export default function Dashboard() {
   const cump = C.cumplimiento(db, state, hoy);
   const uc = C.ultimoCierre(db);
 
-  const porCat = [...db.grupos.map((g) => ({ k: g.id, label: g.nombre })), { k: '', label: 'Sin grupo' }].map((g) => ({
+  const porCat = [...lineas.map((g) => ({ k: g.id, label: g.nombre, set: C.gruposDescendientes(db, g.id) })), { k: '', label: 'Sin clasificar' }].map((g) => ({
     k: g.k || 'sin', label: g.label,
-    valor: db.productos.filter((p) => (g.k ? p.grupoId === g.k : !db.grupos.some((x) => x.id === p.grupoId))).reduce((s, p) => s + (state.prods[p.id]?.value || 0), 0)
+    valor: db.productos.filter((p) => (g.k ? g.set.has(p.grupoId) : !C.rutaGrupo(db, p.grupoId))).reduce((s, p) => s + (state.prods[p.id]?.value || 0), 0)
   })).filter((g) => g.valor > 0).sort((a, b) => b.valor - a.valor);
   const maxCat = Math.max(1, ...porCat.map((x) => x.valor));
   const ultimos = C.ordenar(db.movimientos).reverse().slice(0, 7);
@@ -52,6 +53,7 @@ export default function Dashboard() {
       {acciones.length > 0 && (
         <div className="quick">
           {acciones.map(([t, Icon, ruta]) => <Btn key={t} icon={Icon} onClick={() => go(ruta, 'nuevo')}>{t}</Btn>)}
+          <Btn icon={BarChart3} onClick={() => go('reportes')}>Reportes</Btn>
           <Btn variant="ghost" icon={Compass} onClick={() => go('guia')}>Guía de uso</Btn>
         </div>
       )}
@@ -96,7 +98,7 @@ export default function Dashboard() {
       </div>
 
       <div className="grid g-2b">
-        <Panel title="Valor por grupo" icon={Layers}>
+        <Panel title="Valor por línea" icon={Layers} actions={<Btn size="sm" variant="ghost" onClick={() => go('reportes', 'valorizado-clasificacion')}>Ver reporte</Btn>}>
           <div className="bars">
             {porCat.map((c) => (
               <div className="bar-row" key={c.k}>

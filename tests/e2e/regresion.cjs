@@ -7,7 +7,7 @@ const { chromium } = require('playwright');
   const p = await b.newPage({ viewport: { width: 1440, height: 900 } });
   const err = []; p.on('pageerror', e => err.push(e.message)); p.on('console', m => { if (m.type() === 'error') err.push('console: ' + m.text()); });
   const res = async (n) => { await p.waitForTimeout(450); console.log(n.padEnd(28), '|', (await p.locator('.toast').allTextContents()).slice(-1)[0] || '-', '|', (await p.locator('.modal .errors').allTextContents()).join(' / ').slice(0, 200) || '-'); };
-  const combo = async (loc, txt) => { await loc.click(); await loc.fill(txt); await p.waitForTimeout(150); await p.keyboard.press('Enter'); await p.waitForTimeout(100); };
+  const combo = async (loc, txt) => { const h = await loc.elementHandle(); await h.click(); await h.fill(txt); await p.waitForTimeout(150); await p.keyboard.press('Enter'); await p.waitForTimeout(100); };
   await p.goto(URL); await p.evaluate(() => localStorage.clear()); await p.reload();
   await p.fill('input[autocomplete=username]', 'admin'); await p.fill('input[type=password]', '1234'); await p.click('button[type=submit]'); await p.waitForTimeout(600);
   const vistas = ['panel','guia','entradas','salidas','traslados','requisiciones','devoluciones','ajustes','conteos','ordenes','reabastecimiento','existencias','kardex','kardex/p1','vencimientos','trazabilidad','frio','reportes/abc','reportes/libro','cierres','bodegas','grupos','productos','lotes','kits','terceros','normativa','importar','usuarios','config'];
@@ -19,8 +19,9 @@ const { chromium } = require('playwright');
   await p.locator('.modal input.mono').first().fill('IM-PRE-01');
   await p.locator('.modal input[type=date]').nth(0).fill('2026-06-01'); await p.locator('.modal input[type=date]').nth(1).fill('2031-05-31');
   await p.click('.modal-foot >> text=Guardar'); await res('lote nuevo');
+  const TERCERO = '.modal input[placeholder^="Escriba el NIT"]';
   await p.goto(URL + '#/entradas/nuevo'); await p.waitForTimeout(250);
-  await combo(p.locator('.modal .combo input').first(), '830987');
+  await combo(p.locator(TERCERO), '830987');
   await p.locator('.modal input.mono').first().fill('OS-123456');
   let f = p.locator('.modal .lines tbody tr').first();
   await combo(f.locator('.combo input'), 'IMP-410'); await f.locator('input.mono').fill('IM-PRE-01');
@@ -29,14 +30,14 @@ const { chromium } = require('playwright');
   await p.click('text=Registrar entrada'); await res('entrada');
   // Orden + recepción
   await p.goto(URL + '#/ordenes/nuevo'); await p.waitForTimeout(250);
-  await combo(p.locator('.modal .combo input').first(), 'Andina');
+  await combo(p.locator(TERCERO), 'Andina');
   f = p.locator('.modal .lines tbody tr').first();
   await combo(f.locator('.combo input'), 'guantes'); await f.locator('input[type=number]').nth(0).fill('10'); await f.locator('input[type=number]').nth(1).fill('21000');
   await p.click('text=Crear orden'); await res('orden de compra');
   // Salida con kit
   await p.goto(URL + '#/salidas/nuevo'); await p.waitForTimeout(250);
-  await p.locator('.modal .form-grid input').nth(1).fill('HC-55555');
-  await p.locator('.modal .toolbar select').first().selectOption({ index: 1 });
+  await p.locator('.modal input[placeholder="HC o documento del paciente"]').fill('HC-55555');
+  await combo(p.locator('.modal input[placeholder^="Escriba el procedimiento"]'), 'Resina');
   await p.click('text=Agregar insumos del kit'); await p.waitForTimeout(150);
   await p.click('text=Registrar salida'); await res('salida con kit');
   // Traslado
@@ -51,16 +52,16 @@ const { chromium } = require('playwright');
   await p.click('.modal-foot >> text=Registrar traslado'); await res('atender requisición');
   // Devolución
   await p.goto(URL + '#/devoluciones/nuevo'); await p.waitForTimeout(250);
-  await combo(p.locator('.modal .combo input').first(), 'Andina');
-  await p.locator('.modal .form-grid select').nth(1).selectOption('calidad');
+  await combo(p.locator(TERCERO), 'Andina');
+  await p.locator('.modal select:has(option[value="calidad"])').selectOption('calidad');
   await p.locator('.modal input.mono').first().fill('NC-777');
-  await p.locator('.modal .lines select').first().selectOption({ index: 1 });
+  await combo(p.locator('.modal .lines input[placeholder^="Escriba el lote"]'), 'IV-5520');
   await p.locator('.modal .lines input[type=number]').first().fill('1');
   await p.click('text=Registrar devolución'); await res('devolución');
   // Cuarentena bloquea salida
   await p.goto(URL + '#/salidas/nuevo'); await p.waitForTimeout(250);
-  await p.locator('.modal .form-grid select').first().selectOption('Nevera de insumos');
-  await p.locator('.modal .form-grid input').nth(1).fill('HC-1');
+  await combo(p.locator('.modal .form-grid input[placeholder^="Escriba la bodega"]').first(), 'Nevera');
+  await p.locator('.modal input[placeholder="HC o documento del paciente"]').fill('HC-1');
   await combo(p.locator('.modal .lines .combo input').first(), 'ADH-UNI'); await p.locator('.modal .lines input[type=number]').first().fill('1');
   await p.click('text=Registrar salida'); await res('cuarentena (debe fallar)');
   await p.keyboard.press('Escape');
@@ -69,8 +70,25 @@ const { chromium } = require('playwright');
   await p.locator('.modal input').nth(0).fill('C3'); await p.locator('.modal input').nth(1).fill('Consultorio 3');
   await p.click('.modal-foot >> text=Guardar'); await res('bodega');
   await p.goto(URL + '#/grupos/nuevo'); await p.waitForTimeout(250);
-  await p.locator('.modal input').nth(0).fill('END'); await p.locator('.modal input').nth(1).fill('Endodoncia');
-  await p.click('.modal-foot >> text=Guardar'); await res('grupo');
+  await p.locator('.modal input.mono').fill('08'); await p.locator('.modal input[placeholder="Ej.: Endodoncia"]').fill('Endodoncia');
+  await p.click('.modal-foot >> text=Guardar'); await res('línea de clasificación');
+  await p.goto(URL + '#/grupos'); await p.waitForTimeout(250);
+  await p.locator('.tbl tbody tr', { hasText: 'Endodoncia' }).locator('button', { hasText: 'Grupo' }).click(); await p.waitForTimeout(200);
+  await p.locator('.modal input.mono').fill('0801'); await p.locator('.modal input[placeholder="Ej.: Endodoncia"]').fill('Limas');
+  await p.click('.modal-foot >> text=Guardar'); await res('grupo dentro de la línea');
+  await p.goto(URL + '#/productos'); await p.waitForTimeout(250);
+  await combo(p.locator('.toolbar .combo input').first(), 'Anestesia');
+  console.log('productos de línea Anestesia'.padEnd(28), '|', await p.locator('.tbl tbody tr').count());
+  // Reportes
+  await p.goto(URL + '#/reportes'); await p.waitForTimeout(300);
+  console.log('reportes en catálogo'.padEnd(28), '|', await p.locator('.rep-item').count());
+  for (const r of ['existencias-bodega', 'valorizado-clasificacion', 'existencias-lote', 'libro', 'compras-proveedor', 'consumo-producto', 'consumo-procedimiento', 'por-vencer', 'abc', 'auditoria']) {
+    await p.goto(URL + '#/reportes/' + r); await p.waitForTimeout(300);
+    console.log(('reporte ' + r).padEnd(28), '|', await p.locator('.tbl tbody tr').count(), 'filas');
+  }
+  await p.goto(URL + '#/reportes/kardex'); await p.waitForTimeout(300);
+  await combo(p.locator('.rep-filtros .combo input').first(), 'RES-A3'); await p.waitForTimeout(300);
+  console.log('reporte kardex RES-A3'.padEnd(28), '|', await p.locator('.tbl tbody tr').count(), 'filas');
   // Conteo + cierre
   await p.goto(URL + '#/conteos'); await p.waitForTimeout(250);
   await p.click('text=Nuevo conteo'); await p.click('text=Abrir conteo'); await p.waitForTimeout(300);

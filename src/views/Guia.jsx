@@ -34,10 +34,10 @@ const PROCESOS = [
     ]
   },
   {
-    t: 'Cómo crear bodegas y grupos', ruta: ['bodegas', 'nuevo'], boton: 'Nueva bodega',
+    t: 'Cómo crear bodegas y la clasificación', ruta: ['bodegas', 'nuevo'], boton: 'Nueva bodega',
     pasos: [
       'Maestros › Bodegas › "Nueva bodega": código, nombre, tipo (bodega, consultorio, nevera, cuarentena), responsable y sede. Marque cuál es la principal.',
-      'Maestros › Grupos de productos › "Nuevo grupo": por ejemplo Resinas, Anestésicos, Bioseguridad.',
+      'Maestros › Clasificación › "Nueva línea" (por ejemplo Operatoria) y, en cada línea, "+ Grupo" (Resinas) y "+ Subgrupo" (Resinas compuestas).',
       'En la ficha de cada producto elija su grupo y su bodega habitual.'
     ]
   },
@@ -56,7 +56,7 @@ export default function Guia() {
   const pasos = [
     ['Datos de la empresa y método de valoración', db.config.empresa.nombre && db.config.empresa.nombre !== 'Mi empresa', 'config', '', 'config'],
     ['Crear las bodegas (principal, consultorios, nevera)', db.bodegas.length > 1, 'bodegas', 'nuevo', 'config'],
-    ['Crear los grupos de productos', db.grupos.length > 0, 'grupos', 'nuevo', 'maestros'],
+    ['Crear la clasificación: líneas, grupos y subgrupos', db.grupos.length > 0, 'grupos', 'nuevo', 'maestros'],
     ['Registrar los terceros (proveedores con NIT)', db.proveedores.length > 0, 'terceros', 'nuevo', 'maestros'],
     ['Crear los productos (o importarlos desde Excel)', db.productos.length > 0, 'productos', 'nuevo', 'maestros'],
     ['Cargar el saldo inicial (importación) o la primera compra', db.movimientos.some((m) => m.tipo === 'inicial' || m.tipo === 'entrada'), 'importar', '', 'importar'],

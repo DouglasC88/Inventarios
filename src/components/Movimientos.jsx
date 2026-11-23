@@ -40,13 +40,44 @@ export function SelectBodega({ value, onChange, soloPropia, incluirTodas, exclui
   let lista = db.config.ubicaciones;
   if (soloPropia && usuario && usuario.rol === 'consultorio' && usuario.bodega) lista = [usuario.bodega];
   if (excluir) lista = lista.filter((b) => b !== excluir);
-  return (
-    <select className="select input" value={value} onChange={(e) => onChange(e.target.value)}>
-      {incluirTodas && <option value="todas">Todas las bodegas</option>}
-      {!incluirTodas && !lista.includes(value) && <option value="">Seleccione…</option>}
-      {lista.map((b) => <option key={b} value={b}>{b}</option>)}
-    </select>
-  );
+  const info = (n) => db.bodegas.find((b) => b.nombre === n) || {};
+  const options = [
+    ...(incluirTodas ? [{ value: 'todas', label: 'Todas las bodegas', sub: 'Vista general' }] : []),
+    ...lista.map((b) => ({ value: b, label: b, sub: [info(b).codigo, C.TIPOS_BODEGA[info(b).tipo], info(b).principal ? 'Principal' : ''].filter(Boolean).join(' · '), search: info(b).responsable || '' }))
+  ];
+  return <Combo value={value} onChange={onChange} options={options} placeholder="Escriba la bodega…" />;
+}
+
+/** Buscador de grupos de la clasificación (muestra la ruta Línea › Grupo › Subgrupo). */
+export function SelectGrupo({ value, onChange, incluirTodos, incluirSin, placeholder }) {
+  const { db } = useStore();
+  const options = [
+    ...(incluirTodos ? [{ value: 'todos', label: 'Todos los grupos', sub: 'Sin filtro' }] : []),
+    ...(incluirSin ? [{ value: 'sin', label: 'Sin clasificar', sub: 'Productos sin grupo' }] : []),
+    ...C.arbolGrupos(db).map((g) => ({ value: g.id, label: '\u2003'.repeat(g.nivel - 1) + g.codigo + ' · ' + g.nombre, sub: C.NIVELES_GRUPO[Math.min(g.nivel, 3)] + ' · ' + g.ruta, search: g.ruta }))
+  ];
+  return <Combo value={value} onChange={onChange} options={options} placeholder={placeholder || 'Escriba línea, grupo o subgrupo…'} />;
+}
+
+/** Buscador de lotes con existencia. keyFn arma el valor de cada opción. */
+export function SelectLote({ value, onChange, keyFn, filtro, todos, bodega, extra }) {
+  const { db, state, hoy } = useStore();
+  const options = [
+    ...C.lotes(db, state, hoy, { todos, bodega }).filter((l) => !filtro || filtro(l)).map((l) => ({
+      value: keyFn(l),
+      label: l.producto.codigo + ' · ' + l.producto.nombre + ' · lote ' + l.lote,
+      sub: l.bodega + ' · vence ' + (l.vence || '—') + ' · existencia ' + C.r2(l.qty) + ' ' + (l.producto.unidad || '') + (l.estado === 'vencido' ? ' · VENCIDO' : '') + ((C.buscarLote(db, l.productoId, l.lote) || {}).estado && C.buscarLote(db, l.productoId, l.lote).estado !== 'liberado' ? ' · ' + C.ESTADOS_LOTE[C.buscarLote(db, l.productoId, l.lote).estado] : ''),
+      search: l.producto.gtin || ''
+    })),
+    ...(extra || [])
+  ];
+  return <Combo value={value} onChange={onChange} options={options} placeholder="Escriba el lote o el producto…" />;
+}
+
+export function SelectKit({ value, onChange }) {
+  const { db } = useStore();
+  const options = db.kits.map((k) => ({ value: k.id, label: k.codigo + ' · ' + k.nombre, sub: k.lineas.length + ' insumos' }));
+  return <Combo value={value} onChange={onChange} options={options} placeholder="Escriba el procedimiento o kit…" />;
 }
 
 export function encabezadoMov(db, mov, costos) {
