@@ -6,14 +6,25 @@ Estatuto Tributario arts. 62, 64, 65 y 771-2, Código de Comercio art. 52,
 Res. 3100/2019, Dec. 4725/2005, Res. 4816/2008 y Res. 1403/2007.
 Ver `README.md` para módulos y arquitectura.
 
-## Preferencias del proyecto (respetar siempre)
+## Despliegue automático (autorizado por el usuario, respetar siempre)
 
-- **Actualizar directo en producción.** Hacer `commit` y `push` de cada avance
-  funcional sin abrir Pull Request ni pedir confirmación para cada cambio
-  (salvo que el usuario indique lo contrario).
-- **Producción = Vercel, conectado a la rama `main`.** Cada avance se publica
-  llevando los cambios a `main` (merge + push), lo que dispara el deploy
-  automático. `vercel.json` define la compilación (`npm run build` → `dist`).
+El usuario autorizó de forma permanente que **todo cambio se despliegue a
+producción automáticamente**, sin pedir confirmación ni abrir Pull Request.
+Al terminar cada avance funcional, desplegar de inmediato:
+
+1. `npm test` y `npm run build` deben pasar (si fallan, corregir antes).
+2. `git commit` en la rama de trabajo de la sesión y `git push` de esa rama.
+3. Llevar a `main`: `git checkout main && git pull origin main &&
+   git merge --ff-only <rama>` (o merge normal si no es fast-forward) y
+   `git push origin main`; volver a la rama de trabajo.
+4. Vercel (proyecto **Inventarios**, cuenta `douglasc88`, importado desde
+   GitHub `DouglasC88/Inventarios`) despliega `main` a producción
+   automáticamente con cada push. `vercel.json` fija la compilación
+   (preset Vite, `npm run build` → `dist`); no hace falta tocar Vercel.
+5. Informar al usuario el commit publicado. Si la compilación de Vercel
+   falla, el usuario lo ve en su panel de Vercel; corregir y volver a subir.
+
+## Preferencias del proyecto (respetar siempre)
 - Interfaz en español, estilo futurista (HUD, vidrio, neón). No copiar el
   diseño ni la marca de otros sistemas (Dentos, A2, SAP); solo ideas de
   funcionalidad.
