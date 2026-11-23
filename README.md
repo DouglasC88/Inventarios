@@ -6,6 +6,8 @@ Colombia, con referencia a las normas internacionales.
 
 Aplicación JavaScript (React + Vite) con interfaz futurista tipo HUD.
 
+**Producción:** https://fluxstock-indol.vercel.app/ (despliegue automático de Vercel desde `main`).
+
 ## Módulos
 
 | Área | Módulo | Qué hace | Norma o referencia |

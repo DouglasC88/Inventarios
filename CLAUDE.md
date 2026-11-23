@@ -21,7 +21,8 @@ Al terminar cada avance funcional, desplegar de inmediato:
    GitHub `DouglasC88/Inventarios`) despliega `main` a producción
    automáticamente con cada push. `vercel.json` fija la compilación
    (preset Vite, `npm run build` → `dist`); no hace falta tocar Vercel.
-5. Informar al usuario el commit publicado. Si la compilación de Vercel
+5. Producción: **https://fluxstock-indol.vercel.app/** (la app abre en `#/panel`).
+6. Informar al usuario el commit publicado. Si la compilación de Vercel
    falla, el usuario lo ve en su panel de Vercel; corregir y volver a subir.
 
 ## Preferencias del proyecto (respetar siempre)
