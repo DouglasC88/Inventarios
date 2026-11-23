@@ -19,10 +19,14 @@ const ARTICULOS = [
   ]],
   ['productos', 'Cómo crear un producto o insumo con sus lotes', ['productos', 'nuevo'], [
     'Menú Productos y servicios › Productos › "Nuevo": elija qué va a crear (insumo, dispositivo médico, medicamento, instrumental o equipo, o servicio).',
-    'Identificación: código, nombre, clasificación (escriba la línea o grupo), tipo de material, marca, presentación y código de barras.',
-    'Almacenamiento: unidad, mínimo, máximo, bodega habitual y ubicación física. Marque si maneja lote y vencimiento.',
-    'Compras: unidad de compra (por ejemplo, caja x50), proveedor preferido y días de entrega.',
-    'Sanitaria: registro INVIMA, vencimiento del registro, clase de riesgo y cadena de frío.',
+    'Los botones de arriba de la ficha llevan a cada sección. Los campos con * son obligatorios.',
+    'Identificación: código, nombre, nombre comercial, clasificación, marca, referencia, fabricante, presentación, código de barras (se valida el dígito GS1) y foto.',
+    'Sanitaria: registro INVIMA y su vencimiento. Medicamento: principio activo, concentración, forma farmacéutica, vía, CUM, ATC y control especial. Dispositivo: uso único o reutilizable, esterilidad e implantable (exige salida a un paciente).',
+    'Almacenamiento: unidad, bodega, ubicación física, lote y vencimiento, temperatura, luz, vida útil, vida útil mínima al recibir (las entradas con menos días se rechazan) y días de alerta propios.',
+    'Reposición: política (según consumo, mínimo y máximo, o manual), mínimo, seguridad, punto de reorden, máximo, cantidad mínima de pedido y unidad de compra.',
+    'Proveedores: preferido y otros proveedores con su referencia y precio pactado (se propone en la orden de compra).',
+    'Precio e IVA: tratamiento de IVA (gravado, exento o excluido; la factura del proveedor lo calcula por línea) y precio de venta con su margen.',
+    'Contabilidad: cuentas propias de inventario y costo (si no, se heredan de la clasificación o de la parametrización) y valor neto realizable.',
     'Lotes y existencia inicial: "Agregar lote" con número, fabricación y vencimiento; si ya lo tiene en bodega, escriba la cantidad y el costo.'
   ]],
   ['productos', 'Cómo crear un servicio y los insumos que consume', ['kits', 'nuevo'], [
@@ -43,12 +47,13 @@ const ARTICULOS = [
     'Desde Lotes puede poner un lote en cuarentena o bloquearlo (alerta sanitaria, excursión de temperatura) y liberarlo después.'
   ]],
   ['productos', 'Cómo cargar productos y existencias desde Excel', ['importar', ''], [
-    'Menú Productos y servicios › Carga desde Excel › pestaña Productos › "Plantilla".',
-    'Llene una fila por lote: código, nombre, clasificación, unidad, lote, vencimiento, cantidad y costo.',
+    'Productos › "Cargar desde Excel" (o Productos y servicios › Carga desde Excel) › "Descargar plantilla".',
+    'Llene una fila por lote: código, nombre, categoría y unidad son lo básico; puede agregar clasificación, marca, proveedor (NIT), tarifa de IVA, principio activo, INVIMA y las demás columnas de la plantilla.',
+    'Para corregir fichas masivamente: "Exportar" en Productos trae las mismas columnas; edítelas y vuelva a cargar el archivo.',
     'Suba el archivo: verá la vista previa con errores por fila. Pulse "Aplicar importación".'
   ]],
   ['terceros', 'Cómo cargar terceros de forma masiva', ['importar', 'terceros'], [
-    'Menú Productos y servicios › Carga desde Excel › pestaña Terceros › "Plantilla".',
+    'Menú Terceros › "Cargar desde Excel" (o Productos y servicios › Carga desde Excel › Terceros) › "Plantilla".',
     'Una fila por tercero: tipo de documento, número (sin dígito de verificación), razón social, tipo (proveedor, cliente, paciente, empleado), ciudad, correo y teléfono.',
     'Suba el archivo: el sistema calcula el DV, marca los que ya existen (se actualizan) y los que tienen errores.',
     'Pulse "Cargar terceros".'

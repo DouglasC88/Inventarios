@@ -5,9 +5,9 @@ import { Btn, Chip, Empty, Errores, Field, Nota, Panel, Tabs } from '../componen
 import { descargar, fecha, money, num } from '../format.js';
 
 const PLANTILLA = [
-  ['Código', 'Nombre', 'Categoría', 'Unidad', 'Stock mínimo', 'Registro INVIMA', 'Vence INVIMA', 'Riesgo', 'GTIN', 'Bodega', 'Lote', 'Vencimiento', 'Cantidad', 'Costo unitario'],
-  ['GUA-NIT-M', 'Guantes de nitrilo talla M, caja x100', 'Dispositivo médico', 'caja', '15', 'INVIMA 2019DM-0004567', '2028-01-31', 'I', '', 'Bodega principal', 'GN-7781', '2027-12-31', '20', '21000'],
-  ['HIP-525', 'Hipoclorito de sodio 5,25 %, frasco 1 L', 'Insumo', 'frasco', '6', '', '', 'N/A', '', 'Bodega principal', 'HS-0525', '2027-06-30', '12', '9500']
+  ['Código', 'Código alterno', 'Nombre', 'Categoría', 'Tipo de material', 'Clasificación', 'Marca', 'Referencia', 'Fabricante', 'Presentación', 'Unidad', 'Unidad de compra', 'Factor', 'Stock mínimo', 'Stock máximo', 'Proveedor', 'Días de entrega', 'Tarifa IVA', 'Precio de venta', 'Ubicación física', 'Registro INVIMA', 'Vence INVIMA', 'Riesgo', 'GTIN', 'Principio activo', 'Concentración', 'Forma farmacéutica', 'CUM', 'Cadena de frío', 'Implantable', 'Bodega', 'Lote', 'Vencimiento', 'Cantidad', 'Costo unitario'],
+  ['GUA-NIT-M', '', 'Guantes de nitrilo talla M, caja x100', 'Dispositivo médico', 'Insumo consumible', '', 'Marca B', 'NIT-M-100', 'Fabricante de ejemplo', 'Caja x100', 'caja', 'caja', '1', '15', '60', '900123456', '3', '19', '', 'Estante B-2', 'INVIMA 2019DM-0004567', '2028-01-31', 'I', '', '', '', '', '', 'No', 'No', 'Bodega principal', 'GN-7781', '2027-12-31', '20', '21000'],
+  ['LID-2E', '', 'Lidocaína 2 % con epinefrina, cartucho 1,8 mL', 'Medicamento', 'Medicamento', '', 'Marca C', '', '', 'Caja x50 cartuchos', 'cartucho', 'caja x50', '50', '60', '600', '', '10', 'Excluido', '', 'Gabinete medicamentos', 'INVIMA 2020M-0011223', '2028-06-30', 'N/A', '', 'Lidocaína clorhidrato + epinefrina', '2 % + 1:80.000', 'Cartucho anestésico', '19900000-01', 'No', 'No', 'Bodega principal', 'LD-2201', '2027-09-30', '100', '1900']
 ];
 
 async function leerArchivo(file) {
@@ -59,15 +59,16 @@ function ImportarProductos() {
           ids[p.codigo.toUpperCase()] = p.id;
           if (!opc.productos) return;
           const x = proy.productos.find((y) => y.id === p.id);
-          Object.assign(x, { nombre: p.nombre || x.nombre, unidad: p.unidad || x.unidad, stockMin: p.stockMin, invima: p.invima || x.invima, invimaVence: p.invimaVence || x.invimaVence, riesgo: p.riesgo || x.riesgo, gtin: p.gtin || x.gtin });
+          Object.assign(x, { nombre: p.nombre || x.nombre, unidad: p.unidad || x.unidad, stockMin: p.stockMin, invima: p.invima || x.invima, invimaVence: p.invimaVence || x.invimaVence, riesgo: p.riesgo || x.riesgo, gtin: p.gtin || x.gtin }, p.datos || {});
         } else {
           const id = C.nuevoId() + Math.random().toString(36).slice(2, 5);
           ids[p.codigo.toUpperCase()] = id;
-          proy.productos.push({
+          proy.productos.push(Object.assign({
             id, codigo: p.codigo, nombre: p.nombre, categoria: p.categoria, unidad: p.unidad, stockMin: p.stockMin, ubicacion: C.bodegaPrincipal(proy.config),
             fabricante: '', gtin: p.gtin, requiereInvima: p.categoria !== 'insumo', invima: p.invima, invimaVence: p.invimaVence, riesgo: p.riesgo,
-            cadenaFrio: false, vnrUnit: '', activo: true, unidadCompra: '', factorCompra: 1, leadTime: 7, proveedorId: ''
-          });
+            cadenaFrio: false, vnrUnit: '', activo: true, unidadCompra: '', factorCompra: 1, leadTime: 7, proveedorId: '',
+            tipoMaterial: p.categoria === 'medicamento' ? 'medicamento' : 'consumible', controlaLote: true, controlaVence: true
+          }, p.datos || {}));
         }
       });
     }

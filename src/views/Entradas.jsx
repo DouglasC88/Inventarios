@@ -113,7 +113,7 @@ export function NuevaEntrada({ onClose, ordenInicial }) {
       <div className="scanbox" style={{ marginBottom: 12 }}>
         <ScanBarcode size={20} />
         <input className="input mono" value={scan} onChange={(e) => setScan(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); leer(); } }}
-          placeholder="Escanee o pegue el código GS1 / UDI, por ejemplo (01)07701234500018(17)291231(10)LOTE1" />
+          placeholder="Escanee o pegue el código GS1 / UDI, por ejemplo (01)07701234500016(17)291231(10)LOTE1" />
         <Btn size="sm" onClick={leer}>Leer</Btn>
       </div>
       <div className="tbl-wrap lines">

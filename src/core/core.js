@@ -245,6 +245,7 @@ function cuentasBase() {
 function cuentaDe(db, concepto, producto) {
   const base = Object.assign(cuentasBase(), (db.config && db.config.contabilidad) || {});
   const nombrePlan = (cod, def) => { const c = cuentaPlan(db, cod); return c ? c.nombre : def; };
+  if (producto && producto.cuentas && producto.cuentas[concepto]) return { cuenta: producto.cuentas[concepto], nombre: nombrePlan(producto.cuentas[concepto], (base[concepto] || {}).nombre + ' · ' + producto.codigo) };
   let g = producto ? db.grupos.find((x) => x.id === producto.grupoId) : null, guard = 0;
   while (g && guard++ < 10) {
     if (g.cuentas && g.cuentas[concepto]) return { cuenta: g.cuentas[concepto], nombre: nombrePlan(g.cuentas[concepto], (base[concepto] || {}).nombre + ' · ' + g.nombre) };
@@ -279,7 +280,11 @@ function pendientesPorFacturar(db, proveedorId) {
 function calcularFactura(f) {
   const recibido = r2(f.lineas.reduce((s, l) => s + Number(l.valorRecibido || 0), 0));
   const subtotal = r2(f.lineas.reduce((s, l) => s + Number(l.valorFacturado || 0), 0));
-  const iva = f.iva !== undefined && f.iva !== '' ? r2(f.iva) : r2(subtotal * (Number(f.ivaPct) || 0) / 100);
+  // Si cada línea trae su tarifa (tomada del producto), el IVA se calcula línea por línea.
+  const porLinea = f.lineas.length > 0 && f.lineas.every((l) => l.ivaPct !== undefined && l.ivaPct !== '' && l.ivaPct !== null);
+  const iva = f.iva !== undefined && f.iva !== '' ? r2(f.iva)
+    : porLinea ? r2(f.lineas.reduce((s, l) => s + Number(l.valorFacturado || 0) * Number(l.ivaPct) / 100, 0))
+    : r2(subtotal * (Number(f.ivaPct) || 0) / 100);
   const retefuente = r2(subtotal * (Number(f.retefuentePct) || 0) / 100);
   const reteiva = r2(iva * (Number(f.reteivaPct) || 0) / 100);
   const reteica = r2(subtotal * (Number(f.reteicaPct) || 0) / 100);
@@ -784,6 +789,101 @@ const TIPOS_MATERIAL = {
   consumible: 'Insumo consumible', dispositivo: 'Dispositivo médico', medicamento: 'Medicamento',
   instrumental: 'Instrumental reutilizable', repuesto: 'Repuesto o accesorio de equipo', activo: 'Activo menor / dotación'
 };
+// ---------- Ficha del producto ----------
+const UNIDADES = ['unidad', 'caja', 'paquete', 'frasco', 'tubo', 'jeringa', 'cartucho', 'ampolla', 'sobre', 'bolsa', 'rollo', 'par', 'kit', 'blíster', 'galón', 'litro', 'mililitro', 'gramo', 'kilogramo', 'metro'];
+/** Tratamiento de IVA del producto (ET arts. 424, 468-1 y 477). */
+const TARIFAS_IVA = { '19': 'Gravado 19 %', '5': 'Gravado 5 %', exento: 'Exento (0 %)', excluido: 'Excluido de IVA' };
+function pctIva(tarifa) { return tarifa === '19' ? 19 : tarifa === '5' ? 5 : tarifa === 'exento' || tarifa === 'excluido' ? 0 : null; }
+const FORMAS_FARMACEUTICAS = { cartucho: 'Cartucho anestésico', solucionIny: 'Solución inyectable', tableta: 'Tableta', capsula: 'Cápsula', solucionOral: 'Solución oral', suspension: 'Suspensión', enjuague: 'Enjuague bucal', gel: 'Gel', crema: 'Crema o ungüento', aerosol: 'Aerosol o spray', polvo: 'Polvo', otra: 'Otra' };
+const VIAS_ADMIN = { infiltrativa: 'Infiltrativa (anestesia local)', oral: 'Oral', topica: 'Tópica', intravenosa: 'Intravenosa', intramuscular: 'Intramuscular', subcutanea: 'Subcutánea', otra: 'Otra' };
+const ESTERILIZACION = { vapor: 'Vapor (autoclave)', calorSeco: 'Calor seco', oxidoEtileno: 'Óxido de etileno', radiacion: 'Radiación', peroxido: 'Peróxido de hidrógeno (plasma)', noAplica: 'No aplica' };
+/** Cómo se repone el producto (vista de planificación de SAP). */
+const POLITICAS_REPOSICION = { consumo: 'Punto de reorden según el consumo', minmax: 'Mínimo y máximo fijos', manual: 'Manual (sin sugerencia de compra)' };
+
+/** Dígito de control GS1 (GTIN-8, 12, 13 o 14). */
+function gtinValido(g) {
+  const d = String(g || '').replace(/\s/g, '');
+  if (!/^(\d{8}|\d{12}|\d{13}|\d{14})$/.test(d)) return false;
+  let s = 0;
+  for (let i = d.length - 2, k = 0; i >= 0; i--, k++) s += Number(d[i]) * (k % 2 === 0 ? 3 : 1);
+  return (10 - (s % 10)) % 10 === Number(d[d.length - 1]);
+}
+
+/** Valida la ficha de un producto. Devuelve la lista de errores. */
+function validarProducto(db, p) {
+  const e = [];
+  const num = (v) => (v === '' || v === null || v === undefined ? null : Number(v));
+  const cod = String(p.codigo || '').trim();
+  if (!cod) e.push('El código es obligatorio.');
+  else if (db.productos.some((x) => x.id !== p.id && String(x.codigo).trim().toUpperCase() === cod.toUpperCase())) e.push('Ya existe un producto con ese código.');
+  if (p.codigoAlterno && db.productos.some((x) => x.id !== p.id && String(x.codigo).trim().toUpperCase() === String(p.codigoAlterno).trim().toUpperCase())) e.push('El código alterno es el código de otro producto.');
+  if (!String(p.nombre || '').trim()) e.push('El nombre es obligatorio.');
+  if (!String(p.unidad || '').trim()) e.push('La unidad de medida es obligatoria.');
+  if (p.gtin) {
+    if (!gtinValido(p.gtin)) e.push('El código de barras no es un GTIN válido (8, 12, 13 o 14 dígitos con dígito de control GS1).');
+    else if (db.productos.some((x) => x.id !== p.id && x.gtin && x.gtin.replace(/^0+/, '') === p.gtin.replace(/^0+/, ''))) e.push('Otro producto ya tiene ese código de barras.');
+  }
+  if (num(p.stockMin) < 0) e.push('El stock mínimo no puede ser negativo.');
+  if (num(p.stockMax) !== null && num(p.stockMax) < (num(p.stockMin) || 0)) e.push('El stock máximo debe ser mayor o igual al mínimo.');
+  if (num(p.stockSeguridad) !== null && num(p.stockSeguridad) < 0) e.push('El stock de seguridad no puede ser negativo.');
+  if (p.politica === 'minmax' && !(num(p.stockMax) > 0)) e.push('Con la política de mínimo y máximo indique el stock máximo.');
+  if (num(p.puntoReorden) !== null && (num(p.puntoReorden) < 0 || (num(p.stockMax) && num(p.puntoReorden) > num(p.stockMax)))) e.push('El punto de reorden debe estar entre 0 y el stock máximo.');
+  if (num(p.cantidadMinPedido) !== null && num(p.cantidadMinPedido) < 0) e.push('La cantidad mínima de pedido no puede ser negativa.');
+  if (!(Number(p.factorCompra || 1) >= 1)) e.push('El factor de la unidad de compra debe ser 1 o mayor.');
+  if (Number(p.leadTime) < 0) e.push('Los días de entrega no pueden ser negativos.');
+  if (p.invimaVence && !isISODate(p.invimaVence)) e.push('La fecha de vencimiento del registro no es válida.');
+  if (p.requiereInvima && p.invima && !/\d{4}/.test(p.invima)) e.push('El registro INVIMA no parece válido (ej.: INVIMA 2024DM-0001234).');
+  if (num(p.vnrUnit) !== null && num(p.vnrUnit) < 0) e.push('El valor neto realizable no puede ser negativo.');
+  if (num(p.precioVenta) !== null && num(p.precioVenta) < 0) e.push('El precio de venta no puede ser negativo.');
+  if (p.tarifaIva && !TARIFAS_IVA[p.tarifaIva]) e.push('Elija el tratamiento de IVA.');
+  if (num(p.tempMin) !== null && num(p.tempMax) !== null && num(p.tempMin) >= num(p.tempMax)) e.push('La temperatura mínima debe ser menor que la máxima.');
+  if (num(p.diasAlertaVence) !== null && num(p.diasAlertaVence) < 0) e.push('Los días de alerta de vencimiento no pueden ser negativos.');
+  if (num(p.vidaMinRecepcion) !== null && num(p.vidaMinRecepcion) < 0) e.push('La vida útil mínima al recibir no puede ser negativa.');
+  if (num(p.vidaUtilMeses) && num(p.vidaMinRecepcion) && num(p.vidaMinRecepcion) >= num(p.vidaUtilMeses) * 30) e.push('La vida útil mínima al recibir debe ser menor que la vida útil total.');
+  if (p.categoria === 'medicamento') {
+    if (!String(p.principioActivo || '').trim()) e.push('Medicamento: escriba el principio activo (Res. 1403/2007).');
+    if (!String(p.concentracion || '').trim()) e.push('Medicamento: escriba la concentración.');
+    if (!FORMAS_FARMACEUTICAS[p.formaFarmaceutica]) e.push('Medicamento: elija la forma farmacéutica.');
+  }
+  if (p.implantable && p.controlaLote === false) e.push('Un dispositivo implantable debe manejar lote (trazabilidad, Res. 4816/2008).');
+  if (p.controlaVence !== false && p.controlaLote === false) e.push('Si maneja fecha de vencimiento debe manejar lote.');
+  const provs = (p.proveedores || []).filter((x) => x.proveedorId);
+  provs.forEach((x, i) => {
+    if (!db.proveedores.some((t) => t.id === x.proveedorId)) e.push('Proveedor ' + (i + 1) + ': no existe.');
+    if (provs.some((y, j) => j !== i && y.proveedorId === x.proveedorId)) e.push('Proveedor ' + (i + 1) + ': está repetido.');
+    if (num(x.precio) !== null && num(x.precio) < 0) e.push('Proveedor ' + (i + 1) + ': el precio no puede ser negativo.');
+  });
+  Object.entries(p.cuentas || {}).forEach(([k, c]) => {
+    if (!c) return;
+    if (!cuentaPlan(db, c)) e.push('La cuenta ' + c + ' (' + (CONCEPTOS_CONTABLES[k] || k) + ') no existe en el plan de cuentas.');
+    else if (!esDeMovimiento(db, c)) e.push('La cuenta ' + c + ' tiene subcuentas; elija una cuenta de movimiento.');
+  });
+  return e;
+}
+
+/** Precio pactado con el proveedor (ficha del producto) o, si no hay, el último costo de compra. */
+function precioPactado(db, state, productoId, proveedorId) {
+  const p = db.productos.find((x) => x.id === productoId);
+  const x = p && (p.proveedores || []).find((y) => y.proveedorId === proveedorId && y.precio !== '' && y.precio !== undefined && y.precio !== null);
+  if (x) return Number(x.precio);
+  return state && state.prods[productoId] ? state.prods[productoId].ultimoCosto || 0 : 0;
+}
+
+/** Valida una orden de compra antes de crearla. */
+function validarOrdenCompra(db, h, lineas) {
+  const e = [];
+  if (!h.proveedorId) e.push('Seleccione el proveedor.');
+  if (!lineas.length) e.push('Agregue al menos un producto con cantidad.');
+  if (h.fechaEntrega && h.fechaEntrega < h.fecha) e.push('La fecha de entrega no puede ser anterior a la orden.');
+  lineas.forEach((l) => {
+    const p = db.productos.find((x) => x.id === l.productoId);
+    if (!p) return;
+    if (p.bloqueoCompras) e.push(p.codigo + ' está bloqueado para compras (ficha del producto).');
+    if (Number(p.cantidadMinPedido) > 0 && Number(l.cantidad) < Number(p.cantidadMinPedido)) e.push(p.codigo + ': la cantidad mínima de pedido es ' + p.cantidadMinPedido + ' ' + p.unidad + '.');
+  });
+  return e;
+}
+
 function nivelGrupo(db, g) {
   let n = 1, x = g, guard = 0;
   while (x && x.parentId && guard++ < 10) { x = db.grupos.find((y) => y.id === x.parentId); if (x) n++; }
@@ -885,12 +985,16 @@ function siguienteOrden(db) {
 }
 
 // ---------- Estados ----------
-function semaforo(vence, hoy, cfg) {
+/** Semáforo de vencimiento. Si el producto tiene días de alerta propios, se usan en lugar de los generales. */
+function semaforo(vence, hoy, cfg, producto) {
   if (!vence) return 'na';
   const d = daysBetween(hoy, vence);
+  const propio = producto && Number(producto.diasAlertaVence) > 0 ? Number(producto.diasAlertaVence) : 0;
+  const rojo = propio || cfg.semaforo.rojo;
+  const amarillo = propio ? propio * 2 : cfg.semaforo.amarillo;
   if (d < 0) return 'vencido';
-  if (d <= cfg.semaforo.rojo) return 'rojo';
-  if (d <= cfg.semaforo.amarillo) return 'amarillo';
+  if (d <= rojo) return 'rojo';
+  if (d <= amarillo) return 'amarillo';
   return 'verde';
 }
 function requiereInvima(p) {
@@ -1147,6 +1251,14 @@ function validarMovimiento(db, mov, hoy) {
     const n = 'Línea ' + (i + 1) + ': ';
     const p = db.productos.find((x) => x.id === l.productoId);
     if (!p) { e.push(n + 'seleccione un producto.'); return; }
+    if (mov.tipo === 'entrada') {
+      if (p.bloqueoCompras) e.push(n + p.codigo + ' está bloqueado para compras (ficha del producto).');
+      const min = Number(p.vidaMinRecepcion) || 0;
+      if (min > 0 && l.vence && isISODate(l.vence) && isISODate(mov.fecha) && daysBetween(mov.fecha, l.vence) < min) {
+        e.push(n + 'el lote ' + (l.lote || '') + ' llega con ' + daysBetween(mov.fecha, l.vence) + ' días de vida útil; el mínimo para recibir ' + p.codigo + ' es ' + min + ' días (recepción técnica, Res. 1403/2007).');
+      }
+    }
+    if (mov.tipo === 'salida' && p.implantable && mov.destinoTipo && mov.destinoTipo !== 'Paciente') e.push(n + p.codigo + ' es implantable: la salida debe ser a un paciente identificado (tecnovigilancia, Res. 4816/2008).');
     if (l.bodega && !cfg.ubicaciones.includes(l.bodega)) e.push(n + 'la bodega ' + l.bodega + ' no existe.');
     const q = Number(l.cantidad);
     if (!isFinite(q) || q === 0) e.push(n + 'la cantidad debe ser distinta de cero.');
@@ -1215,7 +1327,7 @@ function lotes(db, state, hoy, opts) {
       if (opts.bodega && l.bodega !== opts.bodega) continue;
       out.push({
         producto: p, productoId: p.id, bodega: l.bodega, lote: l.lote, vence: l.vence, qty: l.qty,
-        estado: semaforo(l.vence, hoy, db.config), dias: l.vence ? daysBetween(hoy, l.vence) : null
+        estado: semaforo(l.vence, hoy, db.config, p), dias: l.vence ? daysBetween(hoy, l.vence) : null
       });
     }
   }
@@ -1319,14 +1431,22 @@ function reabastecimiento(db, state, hoy) {
     const lead = Number(p.leadTime) || 7;
     const exist = existencia(state, p.id);
     const pedido = enOrden[p.id] || 0;
-    const seguridad = Math.max(Number(p.stockMin) || 0, diario * (Number(r.seguridadDias) || 0));
-    const puntoReorden = r2(diario * lead + seguridad);
-    const maximo = r2(puntoReorden + diario * (Number(r.coberturaDias) || 30));
+    const politica = p.politica || 'consumo';
+    const seguridad = Math.max(Number(p.stockMin) || 0, Number(p.stockSeguridad) || 0, diario * (Number(r.seguridadDias) || 0));
+    let puntoReorden = r2(diario * lead + seguridad);
+    let maximo = r2(puntoReorden + diario * (Number(r.coberturaDias) || 30));
+    if (Number(p.puntoReorden) > 0) puntoReorden = Number(p.puntoReorden);
+    if (politica === 'minmax') {
+      puntoReorden = Number(p.puntoReorden) > 0 ? Number(p.puntoReorden) : Math.max(Number(p.stockMin) || 0, Number(p.stockSeguridad) || 0);
+      maximo = Number(p.stockMax) || puntoReorden;
+    }
+    if (Number(p.stockMax) > 0 && politica === 'consumo') maximo = Math.max(puntoReorden, Math.min(maximo, Number(p.stockMax)));
     const posicion = exist + pedido;
-    let sugerido = posicion <= puntoReorden ? Math.ceil(Math.max(0, maximo - posicion)) : 0;
+    let sugerido = politica !== 'manual' && !p.bloqueoCompras && posicion <= puntoReorden ? Math.ceil(Math.max(0, maximo - posicion)) : 0;
+    if (sugerido > 0 && Number(p.cantidadMinPedido) > sugerido) sugerido = Number(p.cantidadMinPedido);
     if (sugerido > 0 && Number(p.factorCompra) > 1) sugerido = Math.ceil(sugerido / Number(p.factorCompra)) * Number(p.factorCompra);
     const cobertura = diario > 0 ? Math.floor(exist / diario) : null;
-    return { producto: p, diario, lead, existencia: exist, pedido, puntoReorden, maximo, sugerido, cobertura, ultimoCosto: state.prods[p.id] ? state.prods[p.id].ultimoCosto : 0 };
+    return { producto: p, politica, diario, lead, existencia: exist, pedido, puntoReorden, maximo, sugerido, cobertura, ultimoCosto: precioPactado(db, state, p.id, p.proveedorId) };
   });
 }
 
@@ -1645,20 +1765,42 @@ function aFecha(v) {
 }
 
 const COLUMNAS_IMPORT = {
-  codigo: ['codigo', 'código', 'referencia', 'ref', 'sku', 'item'],
+  codigo: ['codigo', 'código', 'ref', 'sku', 'item', 'codigo interno', 'código interno'],
   nombre: ['nombre', 'descripcion', 'descripción', 'producto', 'articulo', 'artículo'],
-  categoria: ['categoria', 'categoría', 'tipo', 'clase'],
-  unidad: ['unidad', 'um', 'unidad de medida', 'presentacion', 'presentación'],
+  categoria: ['categoria', 'categoría', 'tipo', 'clase', 'categoria sanitaria', 'categoría sanitaria'],
+  unidad: ['unidad', 'um', 'unidad de medida'],
   stockMin: ['stock minimo', 'stock mínimo', 'minimo', 'mínimo', 'stockmin'],
   invima: ['invima', 'registro invima', 'registro sanitario'],
   invimaVence: ['vence invima', 'vencimiento invima', 'vigencia invima'],
-  riesgo: ['riesgo', 'clasificacion', 'clasificación', 'clase de riesgo'],
+  riesgo: ['riesgo', 'clase de riesgo', 'clasificacion de riesgo', 'clasificación de riesgo'],
   gtin: ['gtin', 'codigo de barras', 'código de barras', 'ean', 'barras'],
   bodega: ['bodega', 'ubicacion', 'ubicación', 'almacen', 'almacén'],
   lote: ['lote'],
   vence: ['vence', 'vencimiento', 'fecha de vencimiento', 'fecha vencimiento', 'caducidad'],
   cantidad: ['cantidad', 'existencia', 'saldo', 'stock', 'cant', 'cantidad contada', 'contado', 'conteo', 'fisico', 'físico', 'cantidad fisica', 'cantidad física'],
-  costoUnit: ['costo', 'costo unitario', 'costo unit', 'valor unitario', 'precio']
+  costoUnit: ['costo', 'costo unitario', 'costo unit', 'valor unitario', 'precio'],
+  // Datos opcionales de la ficha
+  codigoAlterno: ['codigo alterno', 'código alterno', 'codigo anterior', 'código anterior'],
+  grupo: ['clasificacion', 'clasificación', 'linea', 'línea', 'grupo', 'subgrupo'],
+  tipoMaterial: ['tipo de material', 'tipo material'],
+  marca: ['marca'],
+  referencia: ['referencia', 'referencia del fabricante', 'ref fabricante'],
+  fabricante: ['fabricante', 'laboratorio fabricante'],
+  presentacion: ['presentacion', 'presentación'],
+  stockMax: ['stock maximo', 'stock máximo', 'maximo', 'máximo'],
+  unidadCompra: ['unidad de compra'],
+  factorCompra: ['factor', 'factor de compra', 'unidades por unidad de compra'],
+  proveedor: ['proveedor', 'nit proveedor', 'proveedor preferido'],
+  leadTime: ['dias de entrega', 'días de entrega', 'tiempo de entrega'],
+  tarifaIva: ['iva', 'tarifa iva', 'tarifa de iva'],
+  precioVenta: ['precio de venta', 'precio venta', 'tarifa'],
+  ubicacionFisica: ['ubicacion fisica', 'ubicación física', 'estante', 'posicion', 'posición'],
+  principioActivo: ['principio activo'],
+  concentracion: ['concentracion', 'concentración'],
+  formaFarmaceutica: ['forma farmaceutica', 'forma farmacéutica'],
+  cum: ['cum'],
+  cadenaFrio: ['cadena de frio', 'cadena de frío', 'refrigerado'],
+  implantable: ['implantable']
 };
 
 /** Interpreta filas (primera = encabezados) en productos y saldos. */
@@ -1678,6 +1820,32 @@ function interpretarImportacion(filas, db) {
   const productos = {};
   const saldos = [];
   const cats = Object.entries(CATEGORIAS);
+  const txt = (f, k) => String(v(f, k) === undefined || v(f, k) === null ? '' : v(f, k)).trim();
+  const si = (x) => /^(s|si|sí|x|1|true|verdadero)$/i.test(String(x).trim());
+  const buscarEn = (obj, x) => { const n = norm(x); return n ? Object.keys(obj).find((k) => norm(k) === n || norm(obj[k]) === n || norm(obj[k]).startsWith(n)) || '' : ''; };
+  /** Solo trae los campos de las columnas que vienen en el archivo, para no borrar datos de productos existentes. */
+  const datosFicha = (f) => {
+    const d = {};
+    const has = (k) => idx[k] !== undefined && txt(f, k) !== '';
+    ['codigoAlterno', 'marca', 'referencia', 'fabricante', 'presentacion', 'unidadCompra', 'ubicacionFisica', 'principioActivo', 'concentracion', 'cum'].forEach((k) => { if (has(k)) d[k] = txt(f, k); });
+    ['stockMax', 'factorCompra', 'leadTime', 'precioVenta'].forEach((k) => { if (has(k) && isFinite(aNumero(v(f, k)))) d[k] = aNumero(v(f, k)); });
+    if (has('tipoMaterial')) d.tipoMaterial = buscarEn(TIPOS_MATERIAL, txt(f, 'tipoMaterial')) || 'consumible';
+    if (has('formaFarmaceutica')) d.formaFarmaceutica = buscarEn(FORMAS_FARMACEUTICAS, txt(f, 'formaFarmaceutica')) || 'otra';
+    if (has('tarifaIva')) { const t = norm(txt(f, 'tarifaIva')); const n = (t.match(/\d+/) || [''])[0]; d.tarifaIva = t.includes('excl') ? 'excluido' : t.includes('exen') || n === '0' ? 'exento' : n === '5' ? '5' : '19'; }
+    if (idx.cadenaFrio !== undefined) d.cadenaFrio = si(txt(f, 'cadenaFrio'));
+    if (idx.implantable !== undefined) d.implantable = si(txt(f, 'implantable'));
+    if (has('grupo')) {
+      const n = norm(txt(f, 'grupo'));
+      const g = db.grupos.find((x) => norm(x.nombre) === n || norm(rutaGrupo(db, x.id)) === n || norm(x.codigo) === n);
+      d.grupoId = g ? g.id : '';
+    }
+    if (has('proveedor')) {
+      const q = txt(f, 'proveedor'); const dig = q.split('-')[0].replace(/\D/g, '');
+      const t = db.proveedores.find((x) => (dig && String(x.nit) === dig) || norm(x.nombre) === norm(q));
+      d.proveedorId = t ? t.id : '';
+    }
+    return d;
+  };
   filas.slice(1).forEach((f, i) => {
     const fila = i + 2;
     const codigo = String(v(f, 'codigo') || '').trim();
@@ -1695,8 +1863,13 @@ function interpretarImportacion(filas, db) {
         invimaVence: aFecha(v(f, 'invimaVence')) || (existente && existente.invimaVence) || '',
         riesgo: String(v(f, 'riesgo') || (existente && existente.riesgo) || 'N/A').trim(),
         gtin: String(v(f, 'gtin') || (existente && existente.gtin) || '').trim(),
+        datos: datosFicha(f),
         fila
       };
+      const pr = productos[codigo.toUpperCase()];
+      if (pr.gtin && !gtinValido(pr.gtin)) errores.push('Fila ' + fila + ': el código de barras ' + pr.gtin + ' de ' + codigo + ' no es un GTIN válido.');
+      if (idx.grupo !== undefined && v(f, 'grupo') && !pr.datos.grupoId) errores.push('Fila ' + fila + ': la clasificación "' + v(f, 'grupo') + '" no existe. Créela en Clasificación o corrija el nombre.');
+      if (idx.proveedor !== undefined && v(f, 'proveedor') && !pr.datos.proveedorId) errores.push('Fila ' + fila + ': el proveedor "' + v(f, 'proveedor') + '" no está en Terceros.');
     }
     const cant = aNumero(v(f, 'cantidad'));
     if (isFinite(cant) && cant > 0) {
@@ -1801,6 +1974,7 @@ export {
   baseLinea, pendientesPorFacturar, calcularFactura, validarFactura, validarComprobanteManual,
   balanceComprobacion, estadoCosto, COLUMNAS_INTERFAZ, archivoInterfaz, interpretarPlanCuentas, interpretarTerceros,
   NIVELES_GRUPO, TIPOS_MATERIAL, nivelGrupo, rutaGrupo, gruposDescendientes, arbolGrupos, lineasMovimiento,
+  UNIDADES, TARIFAS_IVA, pctIva, FORMAS_FARMACEUTICAS, VIAS_ADMIN, ESTERILIZACION, POLITICAS_REPOSICION, gtinValido, validarProducto, precioPactado, validarOrdenCompra,
   TIPOS_DOC, TIPOS_TERCERO, SEXOS, REGIMENES, RESPONSABILIDADES, MEDIOS_PAGO, PLAZOS_PAGO, TIPOS_CUENTA_BANCO, TIPOS_TRABAJADOR, SUBTIPOS_TRABAJADOR, TIPOS_CONTRATO, PERIODICIDADES, DEPARTAMENTOS, nombreTercero, partirNombre, validarTercero, impuestosSugeridos, calcularDV, documentoTercero, normalizarTercero,
   TIPOS_BODEGA, sincronizarBodegas, renombrarBodega, bodegaEnUso,
   ESTADOS_LOTE, claveLote, buscarLote, asegurarLotes,

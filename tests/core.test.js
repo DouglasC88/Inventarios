@@ -517,3 +517,54 @@ test('carga masiva de terceros con nombres por partes, régimen y banco', () => 
   assert.equal(t.nombre, 'Ana Ruiz'); assert.equal(t.departamento, 'Cauca'); assert.equal(t.regimen, 'noResponsable');
   assert.equal(t.plazoPago, 30); assert.equal(t.tipoCuenta, 'ahorros'); assert.equal(t.sexo, 'F'); assert.deepEqual(t.tipos, ['empleado']);
 });
+
+test('ficha del producto: GTIN, medicamento, implantable y reposición', () => {
+  assert.ok(C.gtinValido('07701234500016'));
+  assert.ok(!C.gtinValido('07701234500018'));
+  assert.ok(C.gtinValido('7501031311309'));
+  const db = C.dbVacia();
+  const med = { id: 'm', codigo: 'LID', nombre: 'Lidocaína', unidad: 'cartucho', categoria: 'medicamento' };
+  const e = C.validarProducto(db, med);
+  assert.ok(e.some((x) => /principio activo/.test(x)) && e.some((x) => /forma farmacéutica/.test(x)));
+  assert.deepEqual(C.validarProducto(db, Object.assign({}, med, { principioActivo: 'Lidocaína', concentracion: '2 %', formaFarmaceutica: 'cartucho' })), []);
+  assert.ok(C.validarProducto(db, { codigo: 'I', nombre: 'Implante', unidad: 'unidad', categoria: 'dispositivo', implantable: true, controlaLote: false, controlaVence: false }).some((x) => /implantable/.test(x)));
+  assert.ok(C.validarProducto(db, { codigo: 'X', nombre: 'X', unidad: 'u', politica: 'minmax' }).some((x) => /máximo/.test(x)));
+  assert.ok(C.validarProducto(db, { codigo: 'X', nombre: 'X', unidad: 'u', tempMin: 8, tempMax: 2 }).some((x) => /temperatura/.test(x)));
+});
+
+test('reglas que usan la ficha: recepción, implantable, reposición, cuentas, IVA y precio pactado', () => {
+  const db = base();
+  const p = db.productos[0];
+  Object.assign(p, { vidaMinRecepcion: 180, implantable: true, politica: 'minmax', stockMin: 5, stockMax: 20, cantidadMinPedido: 30, proveedores: [{ proveedorId: 'pv', precio: 777 }], cuentas: { inventario: '145505' }, tarifaIva: 'excluido', diasAlertaVence: 30 });
+  if (!db.proveedores.some((t) => t.id === 'pv')) db.proveedores.push({ id: 'pv', nit: '900123456', nombre: 'Prov' });
+  const ent = { id: 'x', tipo: 'entrada', fecha: HOY, proveedorId: 'pv', docTipo: 'FE', docNum: 'F-77', lineas: [{ productoId: p.id, lote: 'Z1', vence: C.addDays(HOY, 90), cantidad: 1, costoUnit: 10 }] };
+  assert.ok(C.validarMovimiento(db, ent, HOY).some((x) => /vida útil/.test(x)));
+  ent.lineas[0].vence = C.addDays(HOY, 400);
+  assert.ok(!C.validarMovimiento(db, ent, HOY).some((x) => /vida útil/.test(x)));
+  const sal = { id: 's', tipo: 'salida', fecha: HOY, destinoTipo: 'Consultorio', destino: 'C1', lineas: [{ productoId: p.id, lote: 'L1', cantidad: 1 }] };
+  assert.ok(C.validarMovimiento(db, sal, HOY).some((x) => /implantable/.test(x)));
+  const st = C.replay(db);
+  const r = C.reabastecimiento(db, st, HOY).find((x) => x.producto.id === p.id);
+  assert.equal(r.politica, 'minmax');
+  assert.equal(r.maximo, 20);
+  if (r.sugerido) assert.ok(r.sugerido >= 30);
+  assert.equal(C.precioPactado(db, st, p.id, 'pv'), 777);
+  assert.equal(C.cuentaDe(db, 'inventario', p).cuenta, '145505');
+  assert.equal(C.semaforo(C.addDays(HOY, 45), HOY, db.config, p), 'amarillo');
+  assert.equal(C.semaforo(C.addDays(HOY, 45), HOY, db.config), 'rojo');
+  const t = C.calcularFactura({ ivaPct: 19, lineas: [{ valorRecibido: 100, valorFacturado: 100, ivaPct: 0 }, { valorRecibido: 100, valorFacturado: 100, ivaPct: 19 }] });
+  assert.equal(t.iva, 19);
+  assert.ok(C.validarOrdenCompra(db, { proveedorId: 'pv', fecha: HOY }, [{ productoId: p.id, cantidad: 2 }]).some((x) => /mínima de pedido/.test(x)));
+});
+
+test('carga de productos con datos de la ficha', () => {
+  const db = base();
+  db.proveedores.push({ id: 'pv9', nit: '830987654', nombre: 'OdontoSur' });
+  const filas = C.parseCSV('Código;Nombre;Categoría;Unidad;Marca;Tarifa IVA;Principio activo;Forma farmacéutica;Proveedor;Implantable;GTIN\nM1;Articaína;Medicamento;cartucho;Marca X;Excluido;Articaína;Cartucho anestésico;830987654;No;\nI1;Implante;Dispositivo médico;unidad;Marca D;Gravado 5 %;;;;Sí;07701234500018\n');
+  const r = C.interpretarImportacion(filas, db);
+  const m = r.productos.find((x) => x.codigo === 'M1');
+  assert.equal(m.datos.tarifaIva, 'excluido'); assert.equal(m.datos.formaFarmaceutica, 'cartucho'); assert.equal(m.datos.proveedorId, 'pv9'); assert.equal(m.datos.marca, 'Marca X');
+  const i = r.productos.find((x) => x.codigo === 'I1');
+  assert.equal(i.datos.implantable, true); assert.equal(i.datos.tarifaIva, '5');
+  assert.ok(r.errores.some((x) => /GTIN/.test(x)));
+});

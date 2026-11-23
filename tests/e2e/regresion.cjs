@@ -110,6 +110,23 @@ const { chromium } = require('playwright');
   await p.click('.modal-foot >> text=Guardar'); await res('producto con 2 lotes');
   await p.goto(URL + '#/existencias/q:GAS-10'); await p.waitForTimeout(300);
   console.log('existencia GAS-10'.padEnd(28), '|', await p.locator('.prod-card .pc-stock b').first().textContent());
+  // Medicamento: exige principio activo, concentración y forma farmacéutica
+  await p.goto(URL + '#/productos/nuevo'); await p.waitForTimeout(300);
+  await p.locator('.choose .tile', { hasText: 'Medicamento' }).first().click(); await p.waitForTimeout(300);
+  const fp = (l) => p.locator('.modal .field:has(label:text-is("' + l + '")) input').first();
+  await fp('Código *').fill('ART-4'); await fp('Nombre o descripción').fill('Articaína 4 % con epinefrina, cartucho 1,7 mL');
+  await p.click('.modal-foot >> text=Guardar'); await res('medicamento incompleto');
+  await fp('Principio activo *').fill('Articaína clorhidrato + epinefrina'); await fp('Concentración *').fill('4 % + 1:100.000');
+  await p.locator('.modal .field:has(label:text-is("Forma farmacéutica *")) select').selectOption('cartucho');
+  await p.locator('.modal .field:has(label:text-is("Tratamiento de IVA")) select').selectOption('excluido');
+  await fp('GTIN / código de barras').fill('7501031311309');
+  await p.click('.modal-foot >> text=Guardar'); await res('medicamento completo');
+  // Orden de compra con precio pactado (RES-A3 tiene 44.000 con Dental Andina)
+  await p.goto(URL + '#/ordenes/nuevo'); await p.waitForTimeout(400);
+  await combo(p.locator('.modal .field:has(label:text-is("Proveedor (NIT o nombre)")) .combo input'), 'Andina');
+  await combo(p.locator('.modal .lines tbody tr').first().locator('.combo input'), 'RES-A3');
+  console.log('precio pactado en la OC'.padEnd(28), '|', await p.locator('.modal .lines tbody tr').first().locator('input[type=number]').nth(1).inputValue());
+  await p.keyboard.press('Escape'); await p.waitForTimeout(200);
   // Inventario físico desde Excel
   const fs = require('fs'); const os = require('os'); const path = require('path');
   const csv = path.join(os.tmpdir(), 'conteo-prueba.csv');

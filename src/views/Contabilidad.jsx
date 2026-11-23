@@ -50,7 +50,14 @@ function NuevaFactura({ onClose }) {
   const setHk = (k, v) => setH((x) => Object.assign({}, x, { [k]: v }));
   const pend = h.proveedorId ? C.pendientesPorFacturar(db, h.proveedorId) : [];
   const key = (p) => p.movId + '#' + p.idx;
-  const lineas = pend.filter((p) => sel[key(p)]).map((p) => ({ movId: p.movId, idx: p.idx, num: p.num, productoId: p.productoId, valorRecibido: p.valor, valorFacturado: Number(sel[key(p)].valor) }));
+  const provSel = db.proveedores.find((x) => x.id === h.proveedorId);
+  // IVA de cada línea: la tarifa del producto (excluido, exento, 5 % o 19 %) o, si no la tiene, el IVA general de la factura.
+  const ivaLinea = (productoId) => {
+    if (provSel && C.normalizarTercero(provSel).responsableIva === false) return 0;
+    const t = C.pctIva((db.productos.find((x) => x.id === productoId) || {}).tarifaIva);
+    return t === null ? Number(h.ivaPct) || 0 : t;
+  };
+  const lineas = pend.filter((p) => sel[key(p)]).map((p) => ({ movId: p.movId, idx: p.idx, num: p.num, productoId: p.productoId, valorRecibido: p.valor, valorFacturado: Number(sel[key(p)].valor), ivaPct: ivaLinea(p.productoId) }));
   const fac = Object.assign({}, h, { lineas });
   const t = C.calcularFactura(fac);
   const prov = db.proveedores.find((x) => x.id === h.proveedorId);
@@ -86,7 +93,7 @@ function NuevaFactura({ onClose }) {
           <div className="toolbar"><Btn size="sm" onClick={marcarTodo}>Marcar todo</Btn><Btn size="sm" variant="ghost" onClick={() => setSel({})}>Quitar todo</Btn></div>
           <div className="tbl-wrap lines">
             <table className="tbl">
-              <thead><tr><th /><th>Entrada</th><th>Fecha</th><th>Soporte recibido</th><th>Producto</th><th className="num">Cantidad</th><th className="num">Valor recibido</th><th className="num">Valor facturado</th><th className="num">Diferencia</th></tr></thead>
+              <thead><tr><th /><th>Entrada</th><th>Fecha</th><th>Soporte recibido</th><th>Producto</th><th className="num">Cantidad</th><th className="num">Valor recibido</th><th className="num">Valor facturado</th><th className="num">Diferencia</th><th className="num">IVA</th></tr></thead>
               <tbody>
                 {pend.map((p) => {
                   const k = key(p); const s = sel[k];
@@ -98,6 +105,7 @@ function NuevaFactura({ onClose }) {
                       <td>{nombreProducto(db, p.productoId)}<div className="small muted">Lote {p.lote}</div></td><td className="num">{num(p.cantidad)}</td><td className="num">{money(p.valor)}</td>
                       <td>{s ? <input className="input num" type="number" min="0" value={s.valor} onChange={(e) => setSel((x) => Object.assign({}, x, { [k]: { valor: e.target.value } }))} style={{ width: 130 }} /> : ''}</td>
                       <td className={'num ' + (dif > 0 ? 'red-t' : dif < 0 ? 'green-t' : '')}>{s ? money(dif) : ''}</td>
+                      <td className="num small">{s ? (() => { const t = (db.productos.find((x) => x.id === p.productoId) || {}).tarifaIva; return t === 'excluido' ? 'Excluido' : ivaLinea(p.productoId) + ' %'; })() : ''}</td>
                     </tr>
                   );
                 })}
@@ -108,7 +116,7 @@ function NuevaFactura({ onClose }) {
       ) : <Nota>Este proveedor no tiene mercancía recibida pendiente de facturar.</Nota>}
       <div className="section-title">3 · Impuestos y retenciones</div>
       <div className="form-grid">
-        <Field label="IVA (%)"><input className="input" type="number" min="0" max="100" value={h.ivaPct} onChange={(e) => setHk('ivaPct', e.target.value)} /></Field>
+        <Field label="IVA general (%)" hint="Para productos sin tarifa en su ficha"><input className="input" type="number" min="0" max="100" value={h.ivaPct} onChange={(e) => setHk('ivaPct', e.target.value)} /></Field>
         <Field label="Retención en la fuente (%)"><input className="input" type="number" min="0" max="100" step="0.01" value={h.retefuentePct} onChange={(e) => setHk('retefuentePct', e.target.value)} /></Field>
         <Field label="ReteIVA (% del IVA)"><input className="input" type="number" min="0" max="100" value={h.reteivaPct} onChange={(e) => setHk('reteivaPct', e.target.value)} /></Field>
         <Field label="ReteICA (%)"><input className="input" type="number" min="0" max="100" step="0.001" value={h.reteicaPct} onChange={(e) => setHk('reteicaPct', e.target.value)} /></Field>

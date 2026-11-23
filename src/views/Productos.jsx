@@ -1,15 +1,19 @@
 import { useState } from 'react';
-import { Boxes, Download, FileSpreadsheet, Pencil, Pill, Plus, ScrollText, Snowflake, Stethoscope, Syringe, Trash2, Wrench, Package } from 'lucide-react';
+import { Ban, Boxes, Download, FileSpreadsheet, ImagePlus, Pencil, Pill, Plus, ScrollText, Snowflake, Stethoscope, Syringe, Trash2, Wrench, Package } from 'lucide-react';
 import { useStore, C } from '../store.jsx';
 import { SelectBodega, SelectGrupo, SelectTercero } from '../components/Movimientos.jsx';
 import { Btn, Chip, Empty, Errores, Field, Modal, Nota, Panel, SearchBox, Tabs } from '../components/ui.jsx';
 import { descargar, money, num, fecha, INVIMA } from '../format.js';
+import { SelectCuenta } from './Contabilidad.jsx';
 
 const VACIO = {
-  codigo: '', codigoAlterno: '', nombre: '', categoria: 'dispositivo', tipoMaterial: 'consumible', grupoId: '', marca: '', referencia: '', presentacion: '',
-  unidad: 'unidad', stockMin: 0, stockMax: '', ubicacion: '', ubicacionFisica: '', fabricante: '', gtin: '', cum: '',
-  requiereInvima: true, invima: '', invimaVence: '', riesgo: 'I', cadenaFrio: false, controlaLote: true, controlaVence: true,
-  vnrUnit: '', ivaPct: '', precioVenta: '', activo: true, unidadCompra: '', factorCompra: 1, leadTime: 7, proveedorId: ''
+  codigo: '', codigoAlterno: '', nombre: '', nombreComercial: '', descripcion: '', foto: '', categoria: 'dispositivo', tipoMaterial: 'consumible', grupoId: '', marca: '', referencia: '', presentacion: '',
+  unidad: 'unidad', stockMin: 0, stockMax: '', stockSeguridad: '', puntoReorden: '', cantidadMinPedido: '', politica: 'consumo', ubicacion: '', ubicacionFisica: '', fabricante: '', gtin: '', cum: '', ium: '', atc: '',
+  principioActivo: '', concentracion: '', formaFarmaceutica: '', viaAdministracion: '', controlEspecial: false,
+  usoUnico: true, esteril: false, metodoEsterilizacion: '', implantable: false, ciclosVida: '',
+  requiereInvima: true, invima: '', invimaVence: '', riesgo: 'I', cadenaFrio: false, tempMin: '', tempMax: '', fotosensible: false, condiciones: '', controlaLote: true, controlaVence: true,
+  vidaUtilMeses: '', vidaMinRecepcion: '', diasAlertaVence: '',
+  vnrUnit: '', ivaPct: '', tarifaIva: '', precioVenta: '', activo: true, bloqueoCompras: false, unidadCompra: '', factorCompra: 1, leadTime: 7, proveedorId: '', proveedores: [], cuentas: {}
 };
 const TIPOS_CREAR = [
   ['insumo', 'Insumo', 'Material de consumo (gasas, guantes, cepillos…)', Package, '#22d3ee', '#0ea5e9', { categoria: 'insumo', tipoMaterial: 'consumible', requiereInvima: false, riesgo: 'N/A' }],
@@ -19,10 +23,38 @@ const TIPOS_CREAR = [
   ['servicio', 'Servicio', 'Procedimiento con precio, CUPS e insumos que consume', Stethoscope, '#f472b6', '#db2777', null]
 ];
 const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+const SECCIONES = [['ident', 'Identificación'], ['sanitaria', 'Sanitaria'], ['almac', 'Almacenamiento'], ['repos', 'Reposición'], ['provs', 'Proveedores'], ['ventas', 'Precio e IVA'], ['conta', 'Contabilidad'], ['lotes', 'Lotes']];
+
+/** Reduce la foto a un tamaño liviano (máx. 320 px) para guardarla con el producto. */
+function reducirFoto(file) {
+  return new Promise((ok, mal) => {
+    const r = new FileReader();
+    r.onerror = mal;
+    r.onload = () => {
+      const img = new Image();
+      img.onerror = mal;
+      img.onload = () => {
+        const k = Math.min(1, 320 / Math.max(img.width, img.height));
+        const c = document.createElement('canvas');
+        c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+        const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(img, 0, 0, c.width, c.height);
+        ok(c.toDataURL('image/jpeg', 0.78));
+      };
+      img.src = r.result;
+    };
+    r.readAsDataURL(file);
+  });
+}
 
 export function FormProducto({ inicial, onClose }) {
-  const { db, state, hoy, commit, toast, nombreUsuario } = useStore();
-  const [f, setF] = useState(() => Object.assign({}, VACIO, { ubicacion: db.config.ubicaciones[0] || '' }, inicial || {}));
+  const { db, state, hoy, commit, toast, nombreUsuario, go } = useStore();
+  const [f, setF] = useState(() => {
+    const x = Object.assign({}, VACIO, { ubicacion: db.config.ubicaciones[0] || '' }, inicial || {});
+    x.proveedores = (x.proveedores || []).map((y) => Object.assign({}, y));
+    x.cuentas = Object.assign({}, x.cuentas || {});
+    if (x.tarifaIva === '' && x.ivaPct !== '' && x.ivaPct !== undefined) x.tarifaIva = Number(x.ivaPct) === 19 ? '19' : Number(x.ivaPct) === 5 ? '5' : '';
+    return x;
+  });
   const [err, setErr] = useState([]);
   const loteVacio = () => ({ lote: '', fabricado: '', vence: '', bodega: f.ubicacion || C.bodegaPrincipal(db.config), cantidad: '', costoUnit: '' });
   const [nuevosLotes, setNuevosLotes] = useState([]);
@@ -34,43 +66,59 @@ export function FormProducto({ inicial, onClose }) {
     const v = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
     setF((x) => {
       const n = Object.assign({}, x, { [k]: v });
-      if (k === 'categoria') n.requiereInvima = v !== 'insumo';
+      if (k === 'categoria') { n.requiereInvima = v !== 'insumo'; if (v === 'medicamento') { n.tipoMaterial = 'medicamento'; n.riesgo = 'N/A'; } }
+      if (k === 'cadenaFrio' && v && n.tempMin === '' && n.tempMax === '') { n.tempMin = 2; n.tempMax = 8; }
+      if (k === 'implantable' && v) { n.controlaLote = true; n.esteril = true; n.usoUnico = true; }
+      if (k === 'controlaLote' && !v) n.controlaVence = false;
       return n;
     });
   };
   const setV = (k) => (v) => setF((x) => Object.assign({}, x, { [k]: v }));
+  const setCta = (k) => (v) => setF((x) => Object.assign({}, x, { cuentas: Object.assign({}, x.cuentas, { [k]: v }) }));
+  const setProv = (i, k, v) => setF((x) => Object.assign({}, x, { proveedores: x.proveedores.map((y, j) => (j === i ? Object.assign({}, y, { [k]: v }) : y)) }));
   const marcas = [...new Set(db.productos.map((p) => p.marca).filter(Boolean))].sort();
+  const fabricantes = [...new Set(db.productos.map((p) => p.fabricante).filter(Boolean))].sort();
+  const esMed = f.categoria === 'medicamento';
+  const esDisp = f.categoria === 'dispositivo';
+  const sp = f.id ? state.prods[f.id] : null;
+  const costoProm = sp && sp.qty > 0 ? sp.value / sp.qty : sp ? sp.ultimoCosto || 0 : 0;
+  const margen = Number(f.precioVenta) > 0 && costoProm > 0 ? C.r2((1 - costoProm / Number(f.precioVenta)) * 100) : null;
+  const gtinOk = !f.gtin || C.gtinValido(f.gtin);
+  const sinCuentas = Object.assign({}, f, { cuentas: {} });
+  const heredada = (k) => { const c = C.cuentaDe(db, k, sinCuentas); return c.cuenta + ' · ' + c.nombre; };
+  const ir = (id) => { const el = document.getElementById('fp-' + id); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+  const subirFoto = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    try { const url = await reducirFoto(file); setF((x) => Object.assign({}, x, { foto: url })); } catch { toast('No se pudo leer la imagen'); }
+  };
 
   const guardar = () => {
-    const e = [];
-    if (!f.codigo.trim()) e.push('El código es obligatorio.');
-    if (!f.nombre.trim()) e.push('El nombre es obligatorio.');
-    if (db.productos.some((p) => p.id !== f.id && p.codigo.trim().toUpperCase() === f.codigo.trim().toUpperCase())) e.push('Ya existe un producto con ese código.');
-    if (f.gtin && db.productos.some((p) => p.id !== f.id && p.gtin && p.gtin.replace(/^0+/, '') === f.gtin.replace(/^0+/, ''))) e.push('Otro producto ya tiene ese código de barras.');
-    if (Number(f.stockMin) < 0) e.push('El stock mínimo no puede ser negativo.');
-    if (f.stockMax !== '' && Number(f.stockMax) < Number(f.stockMin)) e.push('El stock máximo debe ser mayor o igual al mínimo.');
-    if (f.invimaVence && !C.isISODate(f.invimaVence)) e.push('La fecha de vencimiento del registro no es válida.');
-    if (f.vnrUnit !== '' && Number(f.vnrUnit) < 0) e.push('El valor neto realizable no puede ser negativo.');
-    if (f.ivaPct !== '' && !(Number(f.ivaPct) >= 0 && Number(f.ivaPct) <= 100)) e.push('El IVA debe estar entre 0 y 100 %.');
-    if (!(Number(f.factorCompra) >= 1)) e.push('El factor de la unidad de compra debe ser 1 o mayor.');
-    if (Number(f.leadTime) < 0) e.push('Los días de entrega no pueden ser negativos.');
+    const nn = (v) => (v === '' || v === null || v === undefined ? '' : Number(v));
+    const p = Object.assign({}, f, {
+      codigo: f.codigo.trim(), nombre: f.nombre.trim(), unidad: String(f.unidad || '').trim(), gtin: String(f.gtin || '').replace(/\s/g, ''),
+      stockMin: Number(f.stockMin) || 0, stockMax: nn(f.stockMax), stockSeguridad: nn(f.stockSeguridad), puntoReorden: nn(f.puntoReorden), cantidadMinPedido: nn(f.cantidadMinPedido),
+      factorCompra: Number(f.factorCompra) || 1, leadTime: Number(f.leadTime) || 0, vnrUnit: nn(f.vnrUnit), precioVenta: nn(f.precioVenta),
+      tempMin: nn(f.tempMin), tempMax: nn(f.tempMax), vidaUtilMeses: nn(f.vidaUtilMeses), vidaMinRecepcion: nn(f.vidaMinRecepcion), diasAlertaVence: nn(f.diasAlertaVence), ciclosVida: nn(f.ciclosVida),
+      ivaPct: C.pctIva(f.tarifaIva) === null ? '' : C.pctIva(f.tarifaIva),
+      proveedores: f.proveedores.filter((y) => y.proveedorId).map((y) => ({ proveedorId: y.proveedorId, referencia: String(y.referencia || '').trim(), precio: nn(y.precio), leadTime: nn(y.leadTime) })),
+      cuentas: Object.fromEntries(Object.entries(f.cuentas || {}).filter(([, v]) => v))
+    });
+    if (!esMed) Object.assign(p, { principioActivo: '', concentracion: '', formaFarmaceutica: '', viaAdministracion: '', controlEspecial: false, ium: '', atc: '' });
+    if (!esDisp) Object.assign(p, { implantable: false });
+    const e = C.validarProducto(db, p);
     const filasLote = nuevosLotes.filter((l) => l.lote || l.vence || l.cantidad);
     filasLote.forEach((l, i) => {
       const n = 'Lote ' + (i + 1) + ': ';
-      if (f.controlaLote !== false && !String(l.lote).trim()) e.push(n + 'escriba el número de lote.');
-      if (f.controlaVence !== false && !C.isISODate(l.vence)) e.push(n + 'indique la fecha de vencimiento.');
+      if (p.controlaLote !== false && !String(l.lote).trim()) e.push(n + 'escriba el número de lote.');
+      if (p.controlaVence !== false && !C.isISODate(l.vence)) e.push(n + 'indique la fecha de vencimiento.');
       if (l.fabricado && l.vence && l.fabricado >= l.vence) e.push(n + 'la fabricación debe ser anterior al vencimiento.');
-      if (f.id && C.buscarLote(db, f.id, l.lote)) e.push(n + 'el lote ' + l.lote + ' ya existe para este producto.');
+      if (p.id && C.buscarLote(db, p.id, l.lote)) e.push(n + 'el lote ' + l.lote + ' ya existe para este producto.');
       if (filasLote.some((x, j) => j !== i && x.lote.trim().toUpperCase() === l.lote.trim().toUpperCase() && x.bodega === l.bodega)) e.push(n + 'está repetido.');
       if (Number(l.cantidad) > 0 && (l.costoUnit === '' || Number(l.costoUnit) < 0)) e.push(n + 'indique el costo unitario de la existencia inicial.');
       if (Number(l.cantidad) < 0) e.push(n + 'la cantidad no puede ser negativa.');
     });
-    if (e.length) return setErr(e);
-    const n = (v) => (v === '' || v === null || v === undefined ? '' : Number(v));
-    const p = Object.assign({}, f, {
-      codigo: f.codigo.trim(), nombre: f.nombre.trim(), stockMin: Number(f.stockMin) || 0, stockMax: n(f.stockMax),
-      factorCompra: Number(f.factorCompra) || 1, leadTime: Number(f.leadTime) || 0, vnrUnit: n(f.vnrUnit), ivaPct: n(f.ivaPct), precioVenta: n(f.precioVenta)
-    });
+    if (e.length) { setErr(e); const m = document.querySelector('.modal-body'); if (m) m.scrollTop = 0; return; }
     const nuevo = !p.id;
     if (nuevo) p.id = C.nuevoId();
     const lotesMaestro = filasLote.map((l) => ({ id: C.nuevoId() + Math.random().toString(36).slice(2, 5), productoId: p.id, lote: l.lote.trim(), fabricado: l.fabricado, vence: l.vence, estado: 'liberado', origen: 'Ficha del producto', creado: new Date().toISOString() }));
@@ -94,70 +142,164 @@ export function FormProducto({ inicial, onClose }) {
     onClose();
   };
 
+  const opt = (obj, vacio) => <>{vacio !== undefined && <option value="">{vacio}</option>}{Object.entries(obj).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</>;
+  const tituloNuevo = { consumible: 'insumo', dispositivo: 'dispositivo médico', medicamento: 'medicamento', instrumental: 'instrumental o equipo' }[f.tipoMaterial] || 'producto';
+  const Sec = ({ id, children, extra }) => <div className="section-title" id={'fp-' + id} style={id === 'ident' ? { marginTop: 0 } : undefined}>{children}{extra}</div>;
+
   return (
-    <Modal open title={f.id ? 'Ficha del producto ' + f.codigo : 'Nuevo ' + ({ consumible: 'insumo', dispositivo: 'dispositivo médico', medicamento: 'medicamento', instrumental: 'instrumental o equipo' }[f.tipoMaterial] || 'producto')} icon={Boxes} onClose={onClose} wide
-      footer={<><Btn onClick={onClose}>Cancelar</Btn><Btn variant="primary" onClick={guardar}>Guardar</Btn></>}>
+    <Modal open title={f.id ? 'Ficha del producto ' + f.codigo : 'Nuevo ' + tituloNuevo} icon={Boxes} onClose={onClose} wide
+      footer={<><span className="muted small" style={{ marginRight: 'auto' }}>Los campos con * son obligatorios</span><Btn onClick={onClose}>Cancelar</Btn><Btn variant="primary" onClick={guardar}>Guardar</Btn></>}>
+      <div className="fp-nav">{SECCIONES.map(([k, t]) => <button key={k} type="button" className="chip cyan" onClick={() => ir(k)}>{t}</button>)}</div>
       <Errores lista={err} />
-      <div className="section-title" style={{ marginTop: 0 }}>Identificación</div>
-      <div className="form-grid">
-        <Field label="Código"><input className="input mono" value={f.codigo} onChange={set('codigo')} autoFocus /></Field>
-        <Field label="Código alterno" hint="Código del sistema anterior o del proveedor"><input className="input mono" value={f.codigoAlterno} onChange={set('codigoAlterno')} /></Field>
-        <Field label="Nombre o descripción" span><input className="input" value={f.nombre} onChange={set('nombre')} /></Field>
-        <Field label="Clasificación (línea › grupo › subgrupo)" span hint={db.grupos.length ? '' : 'Cree la clasificación en Maestros › Clasificación'}>
-          <SelectGrupo value={f.grupoId} onChange={setV('grupoId')} placeholder="Escriba la línea, grupo o subgrupo…" />
-        </Field>
-        <Field label="Tipo de material">
-          <select className="select input" value={f.tipoMaterial} onChange={set('tipoMaterial')}>{Object.entries(C.TIPOS_MATERIAL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
-        </Field>
-        <Field label="Categoría sanitaria">
-          <select className="select input" value={f.categoria} onChange={set('categoria')}>{Object.entries(C.CATEGORIAS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
-        </Field>
-        <Field label="Marca">
-          <input className="input" value={f.marca} onChange={set('marca')} list="marcas-lista" />
-          <datalist id="marcas-lista">{marcas.map((m) => <option key={m} value={m} />)}</datalist>
-        </Field>
-        <Field label="Referencia del fabricante"><input className="input mono" value={f.referencia} onChange={set('referencia')} /></Field>
-        <Field label="Fabricante"><input className="input" value={f.fabricante} onChange={set('fabricante')} /></Field>
-        <Field label="Presentación"><input className="input" value={f.presentacion} onChange={set('presentacion')} placeholder="Ej.: Jeringa 4 g" /></Field>
-        <Field label="GTIN / código de barras" hint="Para leer el código GS1 / UDI al recibir"><input className="input mono" value={f.gtin} onChange={set('gtin')} /></Field>
+
+      <Sec id="ident">Identificación</Sec>
+      <div className="fp-ident">
+        <div className="fp-foto">
+          {f.foto ? <img src={f.foto} alt="Foto del producto" /> : <span className="muted small">Sin foto</span>}
+          <label className="btn sm"><ImagePlus size={14} /> {f.foto ? 'Cambiar' : 'Agregar foto'}<input type="file" accept="image/*" hidden onChange={subirFoto} /></label>
+          {f.foto && <button type="button" className="btn ghost sm" onClick={() => setF((x) => Object.assign({}, x, { foto: '' }))}>Quitar</button>}
+        </div>
+        <div className="form-grid">
+          <Field label="Código *"><input className="input mono" value={f.codigo} onChange={set('codigo')} autoFocus /></Field>
+          <Field label="Código alterno" hint="Del sistema anterior o del proveedor"><input className="input mono" value={f.codigoAlterno} onChange={set('codigoAlterno')} /></Field>
+          <Field label="Nombre o descripción" span><input className="input" value={f.nombre} onChange={set('nombre')} placeholder="Nombre genérico, presentación y tamaño" /></Field>
+          <Field label="Nombre comercial"><input className="input" value={f.nombreComercial} onChange={set('nombreComercial')} /></Field>
+          <Field label="Clasificación (línea › grupo › subgrupo)" span hint={db.grupos.length ? '' : 'Cree la clasificación en Productos y servicios › Clasificación'}>
+            <SelectGrupo value={f.grupoId} onChange={setV('grupoId')} placeholder="Escriba la línea, grupo o subgrupo…" />
+          </Field>
+          <Field label="Tipo de material"><select className="select input" value={f.tipoMaterial} onChange={set('tipoMaterial')}>{opt(C.TIPOS_MATERIAL)}</select></Field>
+          <Field label="Categoría sanitaria"><select className="select input" value={f.categoria} onChange={set('categoria')}>{opt(C.CATEGORIAS)}</select></Field>
+          <Field label="Marca">
+            <input className="input" value={f.marca} onChange={set('marca')} list="marcas-lista" />
+            <datalist id="marcas-lista">{marcas.map((m) => <option key={m} value={m} />)}</datalist>
+          </Field>
+          <Field label="Referencia del fabricante"><input className="input mono" value={f.referencia} onChange={set('referencia')} /></Field>
+          <Field label="Fabricante">
+            <input className="input" value={f.fabricante} onChange={set('fabricante')} list="fabricantes-lista" />
+            <datalist id="fabricantes-lista">{fabricantes.map((m) => <option key={m} value={m} />)}</datalist>
+          </Field>
+          <Field label="Presentación"><input className="input" value={f.presentacion} onChange={set('presentacion')} placeholder="Ej.: Jeringa 4 g" /></Field>
+          <Field label="GTIN / código de barras" hint={f.gtin ? (gtinOk ? 'Código GS1 válido' : 'El dígito de control no corresponde') : 'Para leer el código GS1 / UDI al recibir'}>
+            <input className={'input mono' + (gtinOk ? '' : ' invalid')} value={f.gtin} onChange={set('gtin')} inputMode="numeric" />
+          </Field>
+          <Field label="Descripción u observaciones" full><textarea className="input" rows={2} value={f.descripcion} onChange={set('descripcion')} placeholder="Indicaciones de uso, cuidados, sustitutos…" /></Field>
+        </div>
       </div>
 
-      <div className="section-title">Almacenamiento y existencias</div>
+      <Sec id="sanitaria">Información sanitaria</Sec>
       <div className="form-grid">
-        <Field label="Unidad de medida (consumo)"><input className="input" value={f.unidad} onChange={set('unidad')} /></Field>
-        <Field label="Stock mínimo" hint="Según uso y esterilización (Res. 3100)"><input className="input" type="number" min="0" value={f.stockMin} onChange={set('stockMin')} /></Field>
-        <Field label="Stock máximo"><input className="input" type="number" min="0" value={f.stockMax} onChange={set('stockMax')} placeholder="Opcional" /></Field>
+        <Field label="Requiere registro INVIMA"><label className="check"><input type="checkbox" checked={!!f.requiereInvima} onChange={set('requiereInvima')} /> Sí, es un producto regulado</label></Field>
+        <Field label="Registro sanitario INVIMA"><input className="input mono" value={f.invima} onChange={set('invima')} placeholder={esMed ? 'INVIMA 2024M-0000000' : 'INVIMA 2024DM-0000000'} /></Field>
+        <Field label="Vence el registro"><input className="input" type="date" value={f.invimaVence} onChange={set('invimaVence')} /></Field>
+        {!esMed && <Field label="Clasificación por riesgo" hint="Dec. 4725/2005"><select className="select input" value={f.riesgo} onChange={set('riesgo')}>{C.RIESGOS.map((r) => <option key={r}>{r}</option>)}</select></Field>}
+      </div>
+      {esMed && (<>
+        <div className="sub-title">Medicamento (Res. 1403/2007)</div>
+        <div className="form-grid">
+          <Field label="Principio activo *" span><input className="input" value={f.principioActivo} onChange={set('principioActivo')} placeholder="Ej.: Lidocaína clorhidrato + epinefrina" /></Field>
+          <Field label="Concentración *"><input className="input" value={f.concentracion} onChange={set('concentracion')} placeholder="Ej.: 2 % + 1:80.000" /></Field>
+          <Field label="Forma farmacéutica *"><select className="select input" value={f.formaFarmaceutica} onChange={set('formaFarmaceutica')}>{opt(C.FORMAS_FARMACEUTICAS, '—')}</select></Field>
+          <Field label="Vía de administración"><select className="select input" value={f.viaAdministracion} onChange={set('viaAdministracion')}>{opt(C.VIAS_ADMIN, '—')}</select></Field>
+          <Field label="CUM" hint="Código único de medicamentos (INVIMA)"><input className="input mono" value={f.cum} onChange={set('cum')} placeholder="19900000-01" /></Field>
+          <Field label="IUM" hint="Identificador único de medicamentos"><input className="input mono" value={f.ium} onChange={set('ium')} /></Field>
+          <Field label="Código ATC"><input className="input mono" value={f.atc} onChange={set('atc')} placeholder="N01BB52" /></Field>
+          <Field label="Control especial"><label className="check"><input type="checkbox" checked={!!f.controlEspecial} onChange={set('controlEspecial')} /> Medicamento de control especial (FNE)</label></Field>
+        </div>
+      </>)}
+      {esDisp && (<>
+        <div className="sub-title">Dispositivo médico e instrumental</div>
+        <div className="form-grid">
+          <Field label="Uso"><select className="select input" value={f.usoUnico ? 'unico' : 'reutilizable'} onChange={(e) => setF((x) => Object.assign({}, x, { usoUnico: e.target.value === 'unico' }))}><option value="unico">Uso único (desechable)</option><option value="reutilizable">Reutilizable</option></select></Field>
+          <Field label="Esterilidad"><label className="check"><input type="checkbox" checked={!!f.esteril} onChange={set('esteril')} /> Viene estéril</label></Field>
+          <Field label="Método de esterilización"><select className="select input" value={f.metodoEsterilizacion} onChange={set('metodoEsterilizacion')}>{opt(C.ESTERILIZACION, '—')}</select></Field>
+          {!f.usoUnico && <Field label="Vida útil en ciclos" hint="Ciclos de esterilización antes de dar de baja"><input className="input" type="number" min="0" value={f.ciclosVida} onChange={set('ciclosVida')} /></Field>}
+          <Field label="Implantable" hint="Exige lote y salida a un paciente identificado (Res. 4816/2008)"><label className="check"><input type="checkbox" checked={!!f.implantable} onChange={set('implantable')} /> Es un dispositivo implantable</label></Field>
+        </div>
+      </>)}
+
+      <Sec id="almac">Almacenamiento y vencimiento</Sec>
+      <div className="form-grid">
+        <Field label="Unidad de medida (consumo) *">
+          <input className="input" value={f.unidad} onChange={set('unidad')} list="unidades-lista" />
+          <datalist id="unidades-lista">{C.UNIDADES.map((u) => <option key={u} value={u} />)}</datalist>
+        </Field>
         <Field label="Bodega habitual"><SelectBodega value={f.ubicacion} onChange={setV('ubicacion')} /></Field>
         <Field label="Ubicación física" hint="Estante, gaveta o posición"><input className="input" value={f.ubicacionFisica} onChange={set('ubicacionFisica')} placeholder="Ej.: Estante A-3" /></Field>
         <Field label="Controles">
           <label className="check"><input type="checkbox" checked={f.controlaLote !== false} onChange={set('controlaLote')} /> Maneja lote</label>
-          <label className="check"><input type="checkbox" checked={f.controlaVence !== false} onChange={set('controlaVence')} /> Maneja fecha de vencimiento</label>
+          <label className="check"><input type="checkbox" checked={f.controlaVence !== false} onChange={set('controlaVence')} disabled={f.controlaLote === false} /> Maneja fecha de vencimiento</label>
         </Field>
+        <Field label="Cadena de frío"><label className="check"><input type="checkbox" checked={!!f.cadenaFrio} onChange={set('cadenaFrio')} /> Requiere refrigeración</label></Field>
+        <Field label="Temperatura mínima (°C)"><input className="input" type="number" value={f.tempMin} onChange={set('tempMin')} placeholder="Opcional" /></Field>
+        <Field label="Temperatura máxima (°C)"><input className="input" type="number" value={f.tempMax} onChange={set('tempMax')} placeholder="Ej.: 25" /></Field>
+        <Field label="Luz"><label className="check"><input type="checkbox" checked={!!f.fotosensible} onChange={set('fotosensible')} /> Proteger de la luz</label></Field>
+        <Field label="Condiciones especiales" span><input className="input" value={f.condiciones} onChange={set('condiciones')} placeholder="Ej.: mantener cerrado, lejos de fuentes de calor" /></Field>
+        {f.controlaVence !== false && (<>
+          <Field label="Vida útil total (meses)" hint="Desde la fabricación"><input className="input" type="number" min="0" value={f.vidaUtilMeses} onChange={set('vidaUtilMeses')} placeholder="Opcional" /></Field>
+          <Field label="Vida útil mínima al recibir (días)" hint="Entradas con menos días se rechazan (recepción técnica)"><input className="input" type="number" min="0" value={f.vidaMinRecepcion} onChange={set('vidaMinRecepcion')} placeholder="Opcional" /></Field>
+          <Field label="Alerta de vencimiento (días)" hint={'Vacío = la general (' + db.config.semaforo.rojo + ' días)'}><input className="input" type="number" min="0" value={f.diasAlertaVence} onChange={set('diasAlertaVence')} /></Field>
+        </>)}
       </div>
 
-      <div className="section-title">Compras y reabastecimiento</div>
+      <Sec id="repos">Reposición</Sec>
       <div className="form-grid">
+        <Field label="Política de reposición" span><select className="select input" value={f.politica} onChange={set('politica')}>{opt(C.POLITICAS_REPOSICION)}</select></Field>
+        <Field label="Stock mínimo" hint="Según uso y esterilización (Res. 3100)"><input className="input" type="number" min="0" value={f.stockMin} onChange={set('stockMin')} /></Field>
+        <Field label="Stock de seguridad"><input className="input" type="number" min="0" value={f.stockSeguridad} onChange={set('stockSeguridad')} placeholder="Opcional" /></Field>
+        <Field label="Punto de reorden" hint={f.politica === 'consumo' ? 'Vacío = calculado con el consumo y los días de entrega' : 'Vacío = el stock mínimo'}><input className="input" type="number" min="0" value={f.puntoReorden} onChange={set('puntoReorden')} placeholder="Automático" /></Field>
+        <Field label={'Stock máximo' + (f.politica === 'minmax' ? ' *' : '')}><input className="input" type="number" min="0" value={f.stockMax} onChange={set('stockMax')} placeholder="Opcional" /></Field>
+        <Field label="Cantidad mínima de pedido" hint="En unidad de consumo"><input className="input" type="number" min="0" value={f.cantidadMinPedido} onChange={set('cantidadMinPedido')} placeholder="Opcional" /></Field>
         <Field label="Unidad de compra" hint="Ej.: caja x50. Vacío si se compra igual que se consume"><input className="input" value={f.unidadCompra} onChange={set('unidadCompra')} /></Field>
         <Field label="Unidades de consumo por unidad de compra"><input className="input" type="number" min="1" value={f.factorCompra} onChange={set('factorCompra')} /></Field>
+      </div>
+
+      <Sec id="provs">Proveedores y precios pactados</Sec>
+      <div className="form-grid">
         <Field label="Proveedor preferido" span><SelectTercero tipo="proveedor" value={f.proveedorId} onChange={setV('proveedorId')} /></Field>
         <Field label="Días de entrega del proveedor" hint="Para el punto de reorden"><input className="input" type="number" min="0" value={f.leadTime} onChange={set('leadTime')} /></Field>
-        <Field label="IVA (%)" hint="Informativo; el IVA descontable no se suma al costo"><input className="input" type="number" min="0" max="100" value={f.ivaPct} onChange={set('ivaPct')} placeholder="Opcional" /></Field>
-        <Field label="Precio de venta o tarifa" hint="Si el insumo se factura al paciente o se vende"><input className="input" type="number" min="0" value={f.precioVenta} onChange={set('precioVenta')} placeholder="Opcional" /></Field>
+        {sp && <Field label="Último costo de compra"><input className="input" value={money(sp.ultimoCosto || 0)} readOnly /></Field>}
       </div>
+      {f.proveedores.length > 0 && (
+        <div className="tbl-wrap fp-provs">
+          <table className="tbl">
+            <thead><tr><th style={{ minWidth: 240 }}>Proveedor</th><th>Referencia del proveedor</th><th className="num">Precio pactado</th><th className="num">Días de entrega</th><th /></tr></thead>
+            <tbody>{f.proveedores.map((y, i) => (
+              <tr key={i}>
+                <td><SelectTercero tipo="proveedor" value={y.proveedorId} onChange={(v) => setProv(i, 'proveedorId', v)} /></td>
+                <td><input className="input mono" value={y.referencia || ''} onChange={(e) => setProv(i, 'referencia', e.target.value)} /></td>
+                <td><input className="input num" type="number" min="0" value={y.precio ?? ''} onChange={(e) => setProv(i, 'precio', e.target.value)} style={{ width: 130 }} /></td>
+                <td><input className="input num" type="number" min="0" value={y.leadTime ?? ''} onChange={(e) => setProv(i, 'leadTime', e.target.value)} style={{ width: 90 }} /></td>
+                <td><Btn variant="ghost" size="sm" icon={Trash2} onClick={() => setF((x) => Object.assign({}, x, { proveedores: x.proveedores.filter((_, j) => j !== i) }))} /></td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+      )}
+      <div className="toolbar" style={{ marginTop: 8 }}><Btn size="sm" icon={Plus} onClick={() => setF((x) => Object.assign({}, x, { proveedores: [...x.proveedores, { proveedorId: '', referencia: '', precio: '', leadTime: '' }] }))}>Agregar proveedor y precio</Btn></div>
+      <Nota>El precio pactado se propone solo al hacer la orden de compra a ese proveedor. Sin precio pactado se propone el último costo de compra.</Nota>
 
-      <div className="section-title">Información sanitaria</div>
+      <Sec id="ventas">Precio de venta e IVA</Sec>
       <div className="form-grid">
-        <Field label="Requiere registro INVIMA"><label className="check"><input type="checkbox" checked={!!f.requiereInvima} onChange={set('requiereInvima')} /> Sí, es un producto regulado</label></Field>
-        <Field label="Registro sanitario INVIMA"><input className="input mono" value={f.invima} onChange={set('invima')} placeholder="INVIMA 2024DM-0000000" /></Field>
-        <Field label="Vence el registro"><input className="input" type="date" value={f.invimaVence} onChange={set('invimaVence')} /></Field>
-        <Field label="Clasificación por riesgo">
-          <select className="select input" value={f.riesgo} onChange={set('riesgo')}>{C.RIESGOS.map((r) => <option key={r}>{r}</option>)}</select>
+        <Field label="Tratamiento de IVA" hint="Medicamentos y varios dispositivos médicos están excluidos (ET art. 424). Confírmelo con su contador.">
+          <select className="select input" value={f.tarifaIva} onChange={set('tarifaIva')}>{opt(C.TARIFAS_IVA, 'Sin definir (usa el IVA general de la factura)')}</select>
         </Field>
-        {f.categoria === 'medicamento' && <Field label="CUM" hint="Código único de medicamentos"><input className="input mono" value={f.cum} onChange={set('cum')} /></Field>}
-        <Field label="Cadena de frío"><label className="check"><input type="checkbox" checked={!!f.cadenaFrio} onChange={set('cadenaFrio')} /> Requiere refrigeración</label></Field>
+        <Field label="Precio de venta o tarifa" hint="Si el insumo se factura al paciente o se vende"><input className="input" type="number" min="0" value={f.precioVenta} onChange={set('precioVenta')} placeholder="Opcional" /></Field>
+        <Field label="Costo promedio actual"><input className="input" value={money(costoProm)} readOnly /></Field>
+        <Field label="Margen sobre el precio"><input className={'input' + (margen !== null && margen < 0 ? ' invalid' : '')} value={margen === null ? '—' : margen + ' %'} readOnly /></Field>
       </div>
 
-      <div className="section-title">Lotes y existencia inicial</div>
+      <Sec id="conta">Contabilidad y valoración (NIC 2 / Sección 13)</Sec>
+      <div className="form-grid">
+        <Field label="Cuenta de inventario" hint={'Vacío = ' + heredada('inventario')}><SelectCuenta value={f.cuentas.inventario || ''} onChange={setCta('inventario')} placeholder="Heredada" /></Field>
+        <Field label="Cuenta de costo por consumo" hint={'Vacío = ' + heredada('costoConsumo')}><SelectCuenta value={f.cuentas.costoConsumo || ''} onChange={setCta('costoConsumo')} placeholder="Heredada" /></Field>
+        <Field label="Cuenta de costo de venta" hint={'Vacío = ' + heredada('costoVenta')}><SelectCuenta value={f.cuentas.costoVenta || ''} onChange={setCta('costoVenta')} placeholder="Heredada" /></Field>
+        <Field label="Valor neto realizable unitario" hint="Si es menor que el costo, el cierre registra deterioro">
+          <input className="input" type="number" min="0" value={f.vnrUnit} onChange={set('vnrUnit')} placeholder="Opcional" />
+        </Field>
+        <Field label="Plan de cuentas"><button type="button" className="btn sm" onClick={() => { onClose(); go('plan'); }}>Ir al plan de cuentas</button></Field>
+      </div>
+
+      <Sec id="lotes">Lotes y existencia inicial</Sec>
       {lotesExistentes.length > 0 && (
         <div className="tbl-wrap" style={{ marginBottom: 10 }}>
           <table className="tbl">
@@ -195,12 +337,10 @@ export function FormProducto({ inicial, onClose }) {
         ? 'Este producto ya tiene movimientos: aquí puede registrar lotes nuevos (por ejemplo, antes de que llegue el pedido). Las cantidades entran por Entradas o por el inventario físico.'
         : 'Si ya tiene este producto en bodega, escriba la cantidad y el costo de cada lote: el sistema registra la existencia inicial con fecha de hoy. Si la deja vacía, el lote queda creado y la existencia entra con la primera compra.'}</Nota>
 
-      <div className="section-title">Valoración (NIC 2 / Sección 13)</div>
-      <div className="form-grid">
-        <Field label="Valor neto realizable unitario" hint="Si es menor que el costo, el cierre registra deterioro">
-          <input className="input" type="number" min="0" value={f.vnrUnit} onChange={set('vnrUnit')} placeholder="Opcional" />
-        </Field>
-        <Field label="Estado"><label className="check"><input type="checkbox" checked={f.activo !== false} onChange={set('activo')} /> Producto activo</label></Field>
+      <div className="section-title">Estado</div>
+      <div className="toolbar">
+        <label className="check" style={{ marginRight: 18 }}><input type="checkbox" checked={f.activo !== false} onChange={set('activo')} /> Producto activo</label>
+        <label className="check"><input type="checkbox" checked={!!f.bloqueoCompras} onChange={set('bloqueoCompras')} /> Bloqueado para compras (no entra en órdenes, entradas ni sugerencias)</label>
       </div>
     </Modal>
   );
@@ -219,14 +359,16 @@ export default function Productos({ arg }) {
     (estado === 'todos' || (estado === 'activos' ? p.activo !== false : p.activo === false)) &&
     (tipo === 'todos' || (p.tipoMaterial || 'consumible') === tipo) &&
     (grupo === 'todos' || (grupo === 'sin' ? !C.rutaGrupo(db, p.grupoId) : enGrupo.has(p.grupoId))) &&
-    norm([p.nombre, p.codigo, p.codigoAlterno, p.invima, p.gtin, p.marca, p.referencia, p.cum, C.rutaGrupo(db, p.grupoId)].join(' ')).includes(norm(q)))
+    norm([p.nombre, p.nombreComercial, p.codigo, p.codigoAlterno, p.invima, p.gtin, p.marca, p.referencia, p.cum, p.principioActivo, p.fabricante, C.rutaGrupo(db, p.grupoId)].join(' ')).includes(norm(q)))
     .sort((a, b) => a.nombre.localeCompare(b.nombre));
 
   const exportar = () => {
-    const rows = [['Código', 'Código alterno', 'Nombre', 'Clasificación', 'Tipo de material', 'Categoría', 'Marca', 'Referencia', 'Presentación', 'Unidad', 'Unidad de compra', 'Factor', 'Mínimo', 'Máximo', 'Ubicación física', 'GTIN', 'INVIMA', 'Vence INVIMA', 'Riesgo', 'CUM', 'Existencia', 'Costo unitario', 'Valor', 'Activo']];
+    // Mismas columnas que la plantilla de carga: el archivo exportado se puede corregir y volver a cargar.
+    const rows = [['Código', 'Código alterno', 'Nombre', 'Categoría', 'Tipo de material', 'Clasificación', 'Marca', 'Referencia', 'Fabricante', 'Presentación', 'Unidad', 'Unidad de compra', 'Factor', 'Stock mínimo', 'Stock máximo', 'Proveedor', 'Días de entrega', 'Tarifa IVA', 'Precio de venta', 'Ubicación física', 'Registro INVIMA', 'Vence INVIMA', 'Riesgo', 'GTIN', 'Principio activo', 'Concentración', 'Forma farmacéutica', 'CUM', 'Cadena de frío', 'Implantable', 'Existencia', 'Costo promedio', 'Valor', 'Activo']];
     lista.forEach((p) => {
       const s = state.prods[p.id];
-      rows.push([p.codigo, p.codigoAlterno || '', p.nombre, C.rutaGrupo(db, p.grupoId), C.TIPOS_MATERIAL[p.tipoMaterial] || '', C.CATEGORIAS[p.categoria], p.marca || '', p.referencia || '', p.presentacion || '', p.unidad, p.unidadCompra || '', p.factorCompra || 1, p.stockMin, p.stockMax || '', p.ubicacionFisica || '', p.gtin || '', p.invima || '', p.invimaVence || '', p.riesgo, p.cum || '', s ? s.qty : 0, s && s.qty ? C.r2(s.value / s.qty) : 0, s ? s.value : 0, p.activo !== false ? 'Sí' : 'No']);
+      const pv = db.proveedores.find((t) => t.id === p.proveedorId);
+      rows.push([p.codigo, p.codigoAlterno || '', p.nombre, C.CATEGORIAS[p.categoria], C.TIPOS_MATERIAL[p.tipoMaterial] || '', C.rutaGrupo(db, p.grupoId), p.marca || '', p.referencia || '', p.fabricante || '', p.presentacion || '', p.unidad, p.unidadCompra || '', p.factorCompra || 1, p.stockMin, p.stockMax || '', pv ? pv.nit : '', p.leadTime || '', p.tarifaIva ? C.TARIFAS_IVA[p.tarifaIva] : '', p.precioVenta || '', p.ubicacionFisica || '', p.invima || '', p.invimaVence || '', p.riesgo, p.gtin || '', p.principioActivo || '', p.concentracion || '', p.formaFarmaceutica ? C.FORMAS_FARMACEUTICAS[p.formaFarmaceutica] : '', p.cum || '', p.cadenaFrio ? 'Sí' : 'No', p.implantable ? 'Sí' : 'No', s ? s.qty : 0, s && s.qty ? C.r2(s.value / s.qty) : 0, s ? s.value : 0, p.activo !== false ? 'Sí' : 'No']);
     });
     descargar('productos-' + hoy + '.csv', C.csv(rows));
   };
@@ -235,7 +377,7 @@ export default function Productos({ arg }) {
     <Panel title="Maestro de productos" icon={Boxes} sub={num(lista.length) + ' productos'}
       actions={<><Btn icon={Download} onClick={exportar}>Exportar</Btn>{puede('importar') && <Btn icon={FileSpreadsheet} onClick={() => go('importar', 'productos')} title="Crear o actualizar muchos productos y sus existencias con un archivo Excel o CSV">Cargar desde Excel</Btn>}{puede('maestros') && <Btn variant="primary" icon={Plus} onClick={() => setElegir(true)}>Nuevo</Btn>}</>}>
       <div className="toolbar">
-        <SearchBox value={q} onChange={setQ} placeholder="Nombre, código, marca, referencia, código de barras, INVIMA" />
+        <SearchBox value={q} onChange={setQ} placeholder="Nombre, código, marca, referencia, principio activo, código de barras, INVIMA" />
         <div style={{ width: 300, maxWidth: '100%' }}><SelectGrupo value={grupo} onChange={setGrupo} incluirTodos incluirSin /></div>
         <select className="select input" value={tipo} onChange={(e) => setTipo(e.target.value)} style={{ maxWidth: 230 }}>
           <option value="todos">Todos los tipos de material</option>
@@ -258,11 +400,22 @@ export default function Productos({ arg }) {
                 return (
                   <tr key={p.id} style={p.activo === false ? { opacity: 0.5 } : undefined}>
                     <td className="mono">{p.codigo}{p.codigoAlterno ? <div className="small muted">{p.codigoAlterno}</div> : null}</td>
-                    <td>
-                      <div className="strong">{p.nombre} {p.cadenaFrio && <Snowflake size={13} className="cyan-t" />}</div>
-                      <div className="small muted">{[p.marca, p.referencia, p.presentacion].filter(Boolean).join(' · ') || C.TIPOS_MATERIAL[p.tipoMaterial] || ''}</div>
-                      <div className="stockbod">{Object.entries(C.existenciasPorBodega(db, state, p.id)).filter(([, v]) => v > 0).map(([b, v]) => <span key={b}>{b}: {num(v)}</span>)}</div>
-                    </td>
+                    <td><div className="prod-cell">
+                      {p.foto && <img className="prod-thumb" src={p.foto} alt="" />}
+                      <div>
+                        <div className="strong">{p.nombre} {p.cadenaFrio && <Snowflake size={13} className="cyan-t" />}</div>
+                        <div className="small muted">{[p.marca, p.referencia, p.presentacion, p.principioActivo && p.principioActivo + (p.concentracion ? ' ' + p.concentracion : '')].filter(Boolean).join(' · ') || C.TIPOS_MATERIAL[p.tipoMaterial] || ''}</div>
+                        <div className="stockbod">{Object.entries(C.existenciasPorBodega(db, state, p.id)).filter(([, v]) => v > 0).map(([b, v]) => <span key={b}>{b}: {num(v)}</span>)}</div>
+                        {(p.implantable || p.controlEspecial || p.bloqueoCompras || p.tarifaIva === 'excluido') && (
+                          <div className="toolbar" style={{ gap: 4, marginTop: 4 }}>
+                            {p.implantable && <Chip tone="violet">Implantable</Chip>}
+                            {p.controlEspecial && <Chip tone="magenta">Control especial</Chip>}
+                            {p.tarifaIva === 'excluido' && <Chip tone="muted">Excluido de IVA</Chip>}
+                            {p.bloqueoCompras && <Chip tone="red"><Ban size={11} /> Bloqueado para compras</Chip>}
+                          </div>
+                        )}
+                      </div>
+                    </div></td>
                     <td className="small">{C.rutaGrupo(db, p.grupoId) || <span className="muted">Sin clasificar</span>}<div className="muted">{C.TIPOS_MATERIAL[p.tipoMaterial] || C.CATEGORIAS[p.categoria]}</div></td>
                     <td className={'num' + (bajo ? ' red-t' : '')}>{num(qty)} <span className="muted small">{p.unidad}</span><div className="small muted">mín. {num(p.stockMin)}{p.stockMax ? ' · máx. ' + num(p.stockMax) : ''}</div></td>
                     <td className="num">{money(qty > 0 ? s.value / qty : s?.ultimoCosto || 0)}</td>

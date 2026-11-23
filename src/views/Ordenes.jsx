@@ -11,7 +11,7 @@ import { fecha, money, money2, num } from '../format.js';
 const TONO = { abierta: 'amber', parcial: 'cyan', recibida: 'green', anulada: 'muted', cerrada: 'violet' };
 
 export function NuevaOrden({ onClose, inicial }) {
-  const { db, hoy, commit, toast, nombreUsuario } = useStore();
+  const { db, state, hoy, commit, toast, nombreUsuario } = useStore();
   const [h, setH] = useState(() => Object.assign({ fecha: hoy, proveedorId: '', fechaEntrega: C.addDays(hoy, 7), bodega: C.bodegaPrincipal(db.config), nota: '' }, inicial ? inicial.encabezado : {}));
   const [lineas, setLineas] = useState(() => (inicial && inicial.lineas.length ? inicial.lineas : [{ productoId: '', cantidad: '', costoUnit: '' }]));
   const [err, setErr] = useState([]);
@@ -20,10 +20,7 @@ export function NuevaOrden({ onClose, inicial }) {
   const total = lineas.reduce((s, l) => s + (Number(l.cantidad) || 0) * (Number(l.costoUnit) || 0), 0);
   const guardar = () => {
     const ls = lineas.filter((l) => l.productoId && Number(l.cantidad) > 0).map((l) => ({ productoId: l.productoId, cantidad: Number(l.cantidad), costoUnit: Number(l.costoUnit) || 0 }));
-    const e = [];
-    if (!h.proveedorId) e.push('Seleccione el proveedor.');
-    if (!ls.length) e.push('Agregue al menos un producto con cantidad.');
-    if (h.fechaEntrega && h.fechaEntrega < h.fecha) e.push('La fecha de entrega no puede ser anterior a la orden.');
+    const e = C.validarOrdenCompra(db, h, ls);
     if (e.length) return setErr(e);
     const numero = C.verNumero(db, 'orden');
     commit((d) => {
@@ -52,7 +49,9 @@ export function NuevaOrden({ onClose, inicial }) {
           <tbody>
             {lineas.map((l, i) => (
               <tr key={i}>
-                <td><SelectProducto value={l.productoId} onChange={(v) => setL(i, 'productoId', v)} /></td>
+                <td><SelectProducto value={l.productoId} onChange={(v) => setLineas((ls) => ls.map((x, j) => (j === i ? Object.assign({}, x, { productoId: v, costoUnit: x.costoUnit === '' || x.costoUnit === undefined ? Math.round(C.precioPactado(db, state, v, h.proveedorId)) || '' : x.costoUnit }) : x)))} />
+                  {(() => { const pr = db.productos.find((x) => x.id === l.productoId); const ref = pr && (pr.proveedores || []).find((y) => y.proveedorId === h.proveedorId); return ref && ref.referencia ? <div className="small muted">Ref. del proveedor {ref.referencia}</div> : null; })()}
+                </td>
                 <td><input className="input num" type="number" min="0" value={l.cantidad} onChange={(e) => setL(i, 'cantidad', e.target.value)} style={{ width: 110 }} /></td>
                 <td><input className="input num" type="number" min="0" value={l.costoUnit} onChange={(e) => setL(i, 'costoUnit', e.target.value)} style={{ width: 140 }} /></td>
                 <td className="num">{money((Number(l.cantidad) || 0) * (Number(l.costoUnit) || 0))}</td>
