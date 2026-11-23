@@ -10,7 +10,7 @@ Aplicación JavaScript (React + Vite) con interfaz futurista tipo HUD en blanco 
 
 ## Menú (11 secciones, cada una con sus pestañas)
 
-La pantalla de **Inicio** muestra un ícono en relieve por sección (al pasar el mouse sube y se agranda).
+La pantalla de **Inicio** es el menú principal: un ícono en relieve por sección (al pasar el mouse sube y se agranda). No hay menú lateral; desde cualquier pantalla se vuelve con el botón Inicio o el logo, y cada sección muestra sus pestañas arriba.
 
 | Sección | Pestañas | Norma o referencia |
 | --- | --- | --- |

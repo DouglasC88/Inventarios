@@ -113,16 +113,16 @@ function Reloj() {
 
 export default function App() {
   const { db, state, hoy, ruta, toasts, usuario, requiereLogin, salir, puede } = useStore();
-  const [menu, setMenu] = useState(false);
   const modulos = MODULOS.map(([k, l, I, tabs]) => [k, l, I, tabs.filter((t) => !t[4] || puede(t[4]))]).filter((m) => m[3].length);
   const vistaRuta = ruta.vista === 'proveedores' ? 'terceros' : ruta.vista;
   const modulo = modulos.find((m) => m[3].some((t) => t[0] === vistaRuta)) || modulos[0];
   const actual = modulo[3].find((t) => t[0] === vistaRuta) || modulo[3][0];
   const Vista = actual[3];
+  const enInicio = actual[0] === 'inicio';
+  const ModIcon = modulo[2];
   const criticas = requiereLogin ? 0 : C.alertas(db, state, hoy).filter((a) => a.nivel === 'critico').length;
   const rqPend = db.requisiciones.filter((r) => ['pendiente', 'parcial'].includes(C.estadoRequisicion(db, r).estado)).length;
 
-  useEffect(() => { setMenu(false); }, [ruta]);
   useEffect(() => { document.title = actual[1] + ' · NOVA Inventario'; }, [actual]);
 
   if (requiereLogin) return <><Login /><Toasts items={toasts} /></>;
@@ -130,37 +130,26 @@ export default function App() {
   return (
     <>
       <div className="cosmos" aria-hidden="true"><div className="aurora" /><div className="stars" /><div className="floor" /></div>
-      <div className="app">
-        <aside className={'sidebar' + (menu ? ' open' : '')}>
-          <div className="brand" onClick={() => { window.location.hash = '#/inicio'; }} style={{ cursor: 'pointer' }} title="Inicio">
-            <div className="brand-mark"><Hexagon size={20} /></div>
-            <div>
-              <div className="brand-name">NOV<span>A</span></div>
-              <div className="brand-sub">Inventario</div>
-            </div>
-          </div>
-          <nav className="nav">
-            {modulos.map(([k, label, Icon, tabs]) => (
-              <a key={k} href={'#/' + tabs[0][0]} className={modulo[0] === k ? 'active' : ''}>
-                <span className="nav-ico"><Icon size={17} /></span>{label}
-                {k === 'inicio' && criticas > 0 && <span className="count">{criticas}</span>}
-                {k === 'salidas' && rqPend > 0 && <span className="count">{rqPend}</span>}
-              </a>
-            ))}
-          </nav>
-          <div className="sidebar-foot">
-            <div><b>{db.config.empresa.nombre}</b></div>
-            <div>NIT {db.config.empresa.nit || '—'} · Grupo {db.config.empresa.grupo}</div>
-            <div style={{ marginTop: 6 }}><span className="pulse" /> &nbsp;{C.METODOS[C.metodoDe(db.config, hoy)]}</div>
-          </div>
-        </aside>
+      <div className="app sin-lateral">
         <main className="main">
           <header className="topbar">
-            <button type="button" className="btn menu-btn icon-btn" onClick={() => setMenu((m) => !m)} aria-label="Abrir menú"><Menu size={18} /></button>
-            <div>
-              <div className="crumb">NOVA · {modulo[1]}</div>
-              <h1>{actual[1]}</h1>
-            </div>
+            <a className="brand" href="#/inicio" title="Ir al inicio">
+              <div className="brand-mark"><Hexagon size={20} /></div>
+              <div>
+                <div className="brand-name">NOV<span>A</span></div>
+                <div className="brand-sub">Inventario</div>
+              </div>
+            </a>
+            {!enInicio && <a className="btn home-btn" href="#/inicio" title="Volver al menú principal"><House size={16} /> Inicio</a>}
+            {!enInicio && (
+              <div className="seccion">
+                <span className="sec-ico"><ModIcon size={18} /></span>
+                <div>
+                  <div className="crumb">{modulo[0] === 'inicio' ? 'Inicio' : modulo[1]}</div>
+                  <h1>{actual[1]}</h1>
+                </div>
+              </div>
+            )}
             <BuscadorGeneral />
             <div className="spacer" />
             <Reloj />
@@ -173,7 +162,7 @@ export default function App() {
               </div>
             )}
           </header>
-          {modulo[3].length > 1 && (
+          {!enInicio && modulo[0] !== 'inicio' && modulo[3].length > 1 && (
             <div className="modtabs">
               {modulo[3].map(([k, label, Icon]) => (
                 <a key={k} href={'#/' + k} className={actual[0] === k ? 'on' : ''}><Icon size={15} />{label}

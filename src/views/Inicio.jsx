@@ -31,11 +31,16 @@ export default function Inicio({ modulos }) {
       <div className="panel hero scan">
         <div>
           <h2>{saludo}, {nombreUsuario}</h2>
-          <p>{db.config.empresa.nombre} · {C.METODOS[C.metodoDe(db.config, hoy)]} · elija una sección</p>
+          <p>Elija una sección para trabajar. Desde cualquier pantalla vuelve aquí con el botón <b>Inicio</b> o el logo.</p>
+        </div>
+        <div className="meta">
+          <span className="chip violet">{db.config.empresa.nombre}</span>
+          <span className="chip muted">NIT {db.config.empresa.nit || '—'} · NIIF Grupo {db.config.empresa.grupo}</span>
+          <span className="chip cyan"><span className="dot" />{C.METODOS[C.metodoDe(db.config, hoy)]}</span>
         </div>
       </div>
       <div className="launcher">
-        {modulos.filter((m) => m[0] !== 'inicio' || true).map(([k, label, Icon, tabs]) => {
+        {modulos.map(([k, label, Icon, tabs]) => {
           const [a, b] = TONOS[k] || TONOS.inicio;
           const destino = k === 'inicio' ? 'panel' : tabs[0][0];
           return (

@@ -90,7 +90,10 @@ const { chromium } = require('playwright');
   await combo(p.locator('.rep-filtros .combo input').first(), 'RES-A3'); await p.waitForTimeout(300);
   console.log('reporte kardex RES-A3'.padEnd(28), '|', await p.locator('.tbl tbody tr').count(), 'filas');
   // Menú por módulos
-  console.log('módulos en el menú'.padEnd(28), '|', await p.locator('.nav a').count(), '| pestañas en Operaciones:', (await (async () => { await p.goto(URL + '#/entradas'); await p.waitForTimeout(200); return p.locator('.modtabs a').count(); })()));
+  await p.goto(URL + '#/inicio'); await p.waitForTimeout(200);
+  console.log('secciones en Inicio'.padEnd(28), '|', await p.locator('.tile').count(), '| menú lateral:', await p.locator('.sidebar').count(), '| pestañas en Compras:', (await (async () => { await p.goto(URL + '#/entradas'); await p.waitForTimeout(200); return p.locator('.modtabs a').count(); })()));
+  await p.click('.home-btn'); await p.waitForTimeout(200);
+  console.log('botón Inicio vuelve a'.padEnd(28), '|', await p.locator('.tile').count(), 'íconos');
   // Producto nuevo con lotes y existencia inicial
   await p.goto(URL + '#/productos/nuevo'); await p.waitForTimeout(300);
   await p.locator('.modal input.mono').first().fill('GAS-10');
@@ -140,7 +143,8 @@ const { chromium } = require('playwright');
   // Roles
   await p.click('button[title="Cerrar sesión"]'); await p.waitForTimeout(250);
   await p.fill('input[autocomplete=username]', 'consultorio1'); await p.fill('input[type=password]', '3333'); await p.click('button[type=submit]'); await p.waitForTimeout(400);
-  console.log('consultorio sin config'.padEnd(28), '|', !(await p.locator('.nav a').allTextContents()).some((t) => /Configuración|Usuarios/.test(t)));
+  await p.goto(URL + '#/inicio'); await p.waitForTimeout(300);
+  console.log('consultorio sin config'.padEnd(28), '|', !(await p.locator('.tile .tile-t').allTextContents()).some((t) => /Configuración/.test(t)));
   console.log('ERRORES'.padEnd(28), '|', err);
   await b.close();
 })();
