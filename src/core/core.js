@@ -155,8 +155,61 @@ function dbVacia() {
     config: configBase(),
     productos: [], proveedores: [], movimientos: [], conteos: [], cierres: [],
     temperaturas: [], auditoria: [], ordenes: [], requisiciones: [], kits: [], usuarios: [],
+    bodegas: [{ id: 'b-principal', codigo: 'BP', nombre: 'Bodega principal', tipo: 'bodega', responsable: '', sede: '', activa: true }],
+    grupos: [], lotes: [],
     seq: { orden: 0 }
   };
+}
+
+// ---------- Bodegas ----------
+const TIPOS_BODEGA = { bodega: 'Bodega / almacén', consultorio: 'Consultorio', nevera: 'Nevera / cadena de frío', cuarentena: 'Cuarentena', sede: 'Sede externa' };
+
+/** Deja config.ubicaciones (nombres usados por los movimientos) igual a las bodegas activas; la primera es la principal. */
+function sincronizarBodegas(db) {
+  const act = db.bodegas.filter((b) => b.activa !== false);
+  const ppal = act.find((b) => b.principal) || act[0];
+  db.bodegas.forEach((b) => { b.principal = !!ppal && b.id === ppal.id; });
+  db.config.ubicaciones = ppal ? [ppal.nombre, ...act.filter((b) => b !== ppal).map((b) => b.nombre)] : [];
+  return db;
+}
+
+/** Cambia el nombre de una bodega en todos los registros que la usan. */
+function renombrarBodega(db, viejo, nuevo) {
+  if (!viejo || viejo === nuevo) return db;
+  const r = (v) => (v === viejo ? nuevo : v);
+  db.movimientos.forEach((m) => { m.bodega = r(m.bodega); m.bodegaDestino = r(m.bodegaDestino); m.lineas.forEach((l) => { if (l.bodega) l.bodega = r(l.bodega); }); });
+  db.ordenes.forEach((o) => { o.bodega = r(o.bodega); });
+  db.requisiciones.forEach((q) => { q.bodegaSolicita = r(q.bodegaSolicita); q.bodegaAtiende = r(q.bodegaAtiende); });
+  db.usuarios.forEach((u) => { u.bodega = r(u.bodega); });
+  db.productos.forEach((p) => { p.ubicacion = r(p.ubicacion); });
+  db.temperaturas.forEach((t) => { t.ubicacion = r(t.ubicacion); });
+  db.conteos.forEach((c) => { c.bodega = r(c.bodega); c.lineas.forEach((l) => { l.bodega = r(l.bodega); }); });
+  return db;
+}
+
+function bodegaEnUso(db, nombre) {
+  return db.movimientos.some((m) => m.bodega === nombre || m.bodegaDestino === nombre || m.lineas.some((l) => l.bodega === nombre)) ||
+    db.usuarios.some((u) => u.bodega === nombre) ||
+    db.ordenes.some((o) => o.bodega === nombre) ||
+    db.requisiciones.some((q) => q.bodegaSolicita === nombre || q.bodegaAtiende === nombre);
+}
+
+// ---------- Maestro de lotes ----------
+const ESTADOS_LOTE = { liberado: 'Liberado', cuarentena: 'En cuarentena', bloqueado: 'Bloqueado' };
+const claveLote = (productoId, lote) => productoId + '|' + String(lote || '').trim().toUpperCase();
+function buscarLote(db, productoId, lote) {
+  const k = claveLote(productoId, lote);
+  return (db.lotes || []).find((x) => claveLote(x.productoId, x.lote) === k) || null;
+}
+/** Registra en el maestro los lotes nuevos que trae un movimiento de entrada. */
+function asegurarLotes(db, mov) {
+  if (!db.lotes) db.lotes = [];
+  const entra = (l) => ENTRAN.includes(mov.tipo) || (mov.tipo === 'ajuste' && Number(l.cantidad) > 0);
+  mov.lineas.forEach((l) => {
+    if (!entra(l) || !l.productoId || !String(l.lote || '').trim() || buscarLote(db, l.productoId, l.lote)) return;
+    db.lotes.push({ id: nuevoId() + Math.random().toString(36).slice(2, 5), productoId: l.productoId, lote: String(l.lote).trim(), vence: l.vence || '', fabricado: l.fabricado || '', estado: 'liberado', origen: mov.num || '', creado: mov.creado || mov.fecha });
+  });
+  return db;
 }
 
 function nuevoId() {
@@ -350,6 +403,13 @@ function replay(db, opts) {
     }
     movCost[m.id] = { lineas: costos, total: r2(costos.reduce((s, c) => s + c.valor, 0)) };
   }
+  // Estado del lote (liberado, cuarentena, bloqueado) desde el maestro.
+  (db.lotes || []).forEach((x) => {
+    const p = prods[x.productoId];
+    if (!p) return;
+    const k = String(x.lote || '').trim().toUpperCase();
+    for (const key in p.lots) if (p.lots[key].lote.toUpperCase() === k) p.lots[key].estado = x.estado || 'liberado';
+  });
   return { prods, movCost, errors, metodo: metodoActual };
 }
 
@@ -450,6 +510,9 @@ function validarMovimiento(db, mov, hoy) {
     if (mov.tipo === 'salida' && l.vence && isISODate(mov.fecha) && l.vence < mov.fecha) {
       e.push(n + 'el lote ' + l.lote + ' está vencido; no se puede usar. Regístrelo como baja.');
     }
+    const ml = buscarLote(db, l.productoId, l.lote);
+    if (ml && mov.tipo === 'salida' && ml.estado && ml.estado !== 'liberado') e.push(n + 'el lote ' + l.lote + ' está ' + ESTADOS_LOTE[ml.estado].toLowerCase() + '; no se puede entregar.');
+    if (ml && entra && ml.vence && l.vence && ml.vence !== l.vence) e.push(n + 'el lote ' + l.lote + ' ya existe con vencimiento ' + ml.vence + '. Verifique la fecha o use otro número de lote.');
     if (mov.tipo === 'ajuste' && !CAUSAS_AJUSTE[l.causa]) e.push(n + 'seleccione la causa del ajuste.');
   });
 
@@ -508,7 +571,8 @@ function sugerirFEFO(state, productoId, cantidad, hoy, bodega, opts) {
   let resta = Number(cantidad) || 0;
   if (s) {
     const disponibles = Object.values(s.lots)
-      .filter((l) => l.qty > EPS && (!bodega || l.bodega === bodega) && (opts.incluirVencidos || !l.vence || l.vence >= hoy))
+      .filter((l) => l.qty > EPS && (!bodega || l.bodega === bodega) && (opts.incluirVencidos || !l.vence || l.vence >= hoy) &&
+        (opts.incluirNoLiberados || !l.estado || l.estado === 'liberado'))
       .sort((a, b) => ((a.vence || '9999') < (b.vence || '9999') ? -1 : 1));
     for (const l of disponibles) {
       if (resta <= EPS) break;
@@ -1002,6 +1066,8 @@ function csv(filas) {
 }
 
 export {
+  TIPOS_BODEGA, sincronizarBodegas, renombrarBodega, bodegaEnUso,
+  ESTADOS_LOTE, claveLote, buscarLote, asegurarLotes,
   r2, daysBetween, addDays, todayISO, yearOf, isISODate,
   CATEGORIAS, RIESGOS, METODOS, CAUSAS_AJUSTE, CAUSAS_BAJA, CAUSAS_DEVOLUCION, DOC_TIPOS, TIPOS_MOV, PREFIJOS,
   ROLES, PERMISOS, puede, sha256, hashPin,

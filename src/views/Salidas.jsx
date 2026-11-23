@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Layers, PackageMinus, Plus, Trash2 } from 'lucide-react';
 import { useStore, C } from '../store.jsx';
 import { Btn, Errores, Field, Modal, Nota, Panel } from '../components/ui.jsx';
-import { MovTabla, SelectBodega, SelectProducto, TablaFEFO, asignarFEFO, nombreProducto, useRegistrar } from '../components/Movimientos.jsx';
+import { MovTabla, SelectBodega, SelectProducto, TablaFEFO, asignarFEFO, explicarFaltante, nombreProducto, useRegistrar } from '../components/Movimientos.jsx';
 import { num } from '../format.js';
 
 const DESTINOS = ['Paciente', 'Consultorio', 'Servicio', 'Venta'];
@@ -29,7 +29,7 @@ function NuevaSalida({ onClose }) {
 
   const guardar = () => {
     const e = [];
-    asignaciones.forEach((a) => { if (a.faltante > 0) e.push(nombreProducto(db, a.productoId) + ': faltan ' + num(a.faltante) + ' sin vencer en ' + h.bodega + '.'); });
+    asignaciones.forEach((a) => { if (a.faltante > 0) e.push(explicarFaltante(db, state, a.productoId, a.cantidad, h.fecha || hoy, h.bodega)); });
     if (!asignaciones.length) e.push('Agregue al menos un producto con cantidad.');
     if (e.length) return setErr(e);
     const ls = asignaciones.flatMap((a) => a.asignacion.map((x) => ({ productoId: a.productoId, lote: x.lote, vence: x.vence, cantidad: x.cantidad })));
@@ -99,9 +99,9 @@ function NuevaSalida({ onClose }) {
   );
 }
 
-export default function Salidas() {
+export default function Salidas({ arg }) {
   const { puede, usuario } = useStore();
-  const [nueva, setNueva] = useState(false);
+  const [nueva, setNueva] = useState(arg === 'nuevo');
   const propia = usuario && usuario.rol === 'consultorio' && usuario.bodega ? usuario.bodega : null;
   return (
     <Panel title="Salidas y consumos" icon={PackageMinus}

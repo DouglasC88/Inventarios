@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ArrowRightLeft, Plus, Trash2 } from 'lucide-react';
 import { useStore, C } from '../store.jsx';
 import { Btn, Errores, Field, Modal, Nota, Panel } from '../components/ui.jsx';
-import { MovTabla, SelectBodega, SelectProducto, TablaFEFO, asignarFEFO, nombreProducto, useRegistrar } from '../components/Movimientos.jsx';
+import { MovTabla, SelectBodega, SelectProducto, TablaFEFO, asignarFEFO, explicarFaltante, nombreProducto, useRegistrar } from '../components/Movimientos.jsx';
 import { num } from '../format.js';
 
 export function NuevoTraslado({ onClose, requisicion }) {
@@ -22,7 +22,7 @@ export function NuevoTraslado({ onClose, requisicion }) {
 
   const guardar = (parcial) => {
     const e = [];
-    if (!parcial) asignaciones.forEach((a) => { if (a.faltante > 0) e.push(nombreProducto(db, a.productoId) + ': faltan ' + num(a.faltante) + ' en ' + h.bodega + '.'); });
+    if (!parcial) asignaciones.forEach((a) => { if (a.faltante > 0) e.push(explicarFaltante(db, state, a.productoId, a.cantidad, h.fecha || hoy, h.bodega)); });
     const ls = asignaciones.flatMap((a) => a.asignacion.map((x) => ({ productoId: a.productoId, lote: x.lote, vence: x.vence, cantidad: x.cantidad })));
     if (!ls.length) e.push('No hay existencias para trasladar.');
     if (e.length) return setErr(e);
@@ -70,9 +70,9 @@ export function NuevoTraslado({ onClose, requisicion }) {
   );
 }
 
-export default function Traslados() {
+export default function Traslados({ arg }) {
   const { puede } = useStore();
-  const [nuevo, setNuevo] = useState(false);
+  const [nuevo, setNuevo] = useState(arg === 'nuevo');
   return (
     <Panel title="Traslados entre bodegas" icon={ArrowRightLeft} sub="Movimiento de existencias entre bodegas, consultorios y neveras, con lote y vencimiento."
       actions={puede('traslados') && <Btn variant="primary" icon={Plus} onClick={() => setNuevo(true)}>Nuevo traslado</Btn>}>

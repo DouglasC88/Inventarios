@@ -15,7 +15,9 @@ export function useRegistrar() {
     if (e.length) return e;
     const numero = C.verNumero(db, m.tipo);
     commit((d) => {
-      d.movimientos.push(Object.assign({}, m, { num: C.siguienteNumero(d, m.tipo), orden: C.siguienteOrden(d) }));
+      const nuevo = Object.assign({}, m, { num: C.siguienteNumero(d, m.tipo), orden: C.siguienteOrden(d) });
+      d.movimientos.push(nuevo);
+      C.asegurarLotes(d, nuevo);
       if (m.conteoId) {
         const c = d.conteos.find((x) => x.id === m.conteoId);
         if (c) { c.estado = 'aplicado'; c.ajusteNum = numero; c.aplicado = new Date().toISOString(); }
@@ -211,7 +213,7 @@ export function TablaFEFO({ asignaciones }) {
                 </tr>
               );
             }),
-            a.faltante > 0 && <tr key={a.productoId + 'f'}><td>{nombreProducto(db, a.productoId)}</td><td colSpan={4} className="red-t">Sin existencia suficiente sin vencer en la bodega</td><td className="num red-t">{num(a.faltante)}</td></tr>
+            a.faltante > 0 && <tr key={a.productoId + 'f'}><td>{nombreProducto(db, a.productoId)}</td><td colSpan={4} className="red-t">Sin existencia disponible (liberada y sin vencer) en la bodega</td><td className="num red-t">{num(a.faltante)}</td></tr>
           ])}
         </tbody>
       </table>
@@ -224,4 +226,17 @@ export function asignarFEFO(state, lineas, hoy, bodega) {
   const totales = {};
   lineas.forEach((l) => { if (l.productoId && Number(l.cantidad) > 0) totales[l.productoId] = (totales[l.productoId] || 0) + Number(l.cantidad); });
   return Object.entries(totales).map(([id, q]) => Object.assign({ productoId: id, cantidad: q }, C.sugerirFEFO(state, id, q, hoy, bodega)));
+}
+
+/** Explica por qué no alcanza la existencia: lotes vencidos, en cuarentena o bloqueados. */
+export function explicarFaltante(db, state, productoId, cantidad, hoy, bodega) {
+  const ok = C.sugerirFEFO(state, productoId, Infinity, hoy, bodega).asignacion.reduce((s, x) => s + x.cantidad, 0);
+  const todo = C.sugerirFEFO(state, productoId, Infinity, hoy, bodega, { incluirVencidos: true, incluirNoLiberados: true }).asignacion;
+  const venc = todo.filter((x) => x.vence && x.vence < hoy).reduce((s, x) => s + x.cantidad, 0);
+  const lot = (x) => { const m = C.buscarLote(db, productoId, x.lote); return m && m.estado && m.estado !== 'liberado' ? m.estado : null; };
+  const ret = todo.filter((x) => !(x.vence && x.vence < hoy) && lot(x));
+  const partes = [];
+  if (ret.length) partes.push(C.r2(ret.reduce((s, x) => s + x.cantidad, 0)) + ' en lotes en cuarentena o bloqueados (' + ret.map((x) => x.lote).join(', ') + ')');
+  if (venc > 0) partes.push(C.r2(venc) + ' vencidas');
+  return nombreProducto(db, productoId) + ': se piden ' + C.r2(cantidad) + ' y hay ' + C.r2(ok) + ' disponibles en ' + bodega + '.' + (partes.length ? ' No disponibles: ' + partes.join('; ') + '.' : '');
 }

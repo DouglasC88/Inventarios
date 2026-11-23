@@ -9,7 +9,7 @@ const Ctx = createContext(null);
 function normalizar(d) {
   const base = C.dbVacia();
   const db = Object.assign(base, d);
-  ['productos', 'proveedores', 'movimientos', 'conteos', 'cierres', 'temperaturas', 'auditoria', 'ordenes', 'requisiciones', 'kits', 'usuarios']
+  ['productos', 'proveedores', 'movimientos', 'conteos', 'cierres', 'temperaturas', 'auditoria', 'ordenes', 'requisiciones', 'kits', 'usuarios', 'bodegas', 'grupos', 'lotes']
     .forEach((k) => { if (!Array.isArray(db[k])) db[k] = []; });
   db.config = Object.assign(C.configBase(), d.config || {});
   db.config.empresa = Object.assign(C.configBase().empresa, (d.config || {}).empresa || {});
@@ -17,6 +17,13 @@ function normalizar(d) {
   db.seq = Object.assign(base.seq, d.seq || {});
   const bp = C.bodegaPrincipal(db.config);
   db.conteos.forEach((c) => c.lineas.forEach((l) => { if (!l.bodega) l.bodega = bp; }));
+  db.movimientos.forEach((m) => { if (!m.bodega) m.bodega = bp; });
+  // Datos anteriores: las bodegas eran solo nombres en la configuración.
+  if (!Array.isArray(d.bodegas) || !d.bodegas.length) {
+    db.bodegas = db.config.ubicaciones.map((nombre, i) => ({ id: 'b-' + i + '-' + C.nuevoId(), codigo: 'B' + (i + 1), nombre, tipo: /nevera|fr[ií]o/i.test(nombre) ? 'nevera' : /consultorio/i.test(nombre) ? 'consultorio' : 'bodega', responsable: '', sede: '', activa: true, principal: i === 0 }));
+  }
+  C.sincronizarBodegas(db);
+  if (!Array.isArray(d.lotes)) C.ordenar(db.movimientos).forEach((m) => { if (!m.anulado) C.asegurarLotes(db, m); });
   return db;
 }
 

@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { CircleAlert, CircleCheck, Info, Search, X } from 'lucide-react';
 
 export function Panel({ title, icon: Icon, actions, sub, children, className = '', ...rest }) {
@@ -49,7 +50,7 @@ export function Modal({ open, title, icon: Icon, onClose, children, footer, wide
     return () => window.removeEventListener('keydown', f);
   }, [open, onClose]);
   if (!open) return null;
-  return (
+  return createPortal(
     <div className="modal-back" onMouseDown={(e) => e.target === e.currentTarget && onClose && onClose()}>
       <div className={'panel modal' + (wide ? ' wide' : '')} role="dialog" aria-modal="true" aria-label={title}>
         <div className="modal-head">
@@ -61,7 +62,8 @@ export function Modal({ open, title, icon: Icon, onClose, children, footer, wide
         <div className="modal-body">{children}</div>
         {footer && <div className="modal-foot">{footer}</div>}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -128,12 +130,12 @@ export function Gauge({ value, label = 'Cumplimiento' }) {
       <svg width="170" height="170" viewBox="0 0 170 170" aria-hidden="true">
         <defs>
           <linearGradient id="gauge-grad" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor="#22e3ff" />
+            <stop offset="0%" stopColor="#00c2ff" />
             <stop offset="100%" stopColor="#8b5cf6" />
           </linearGradient>
         </defs>
         <circle cx="85" cy="85" r={r + 10} fill="none" stroke="rgba(34,227,255,0.12)" strokeDasharray="2 6" />
-        <circle cx="85" cy="85" r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="12" />
+        <circle cx="85" cy="85" r={r} fill="none" stroke="rgba(14,60,120,0.08)" strokeWidth="12" />
         <circle cx="85" cy="85" r={r} fill="none" stroke="url(#gauge-grad)" strokeWidth="12" strokeLinecap="round"
           strokeDasharray={c} strokeDashoffset={c * (1 - v / 100)} style={{ transition: 'stroke-dashoffset 1s ease', filter: 'drop-shadow(0 0 8px rgba(34,227,255,0.6))' }} />
       </svg>

@@ -13,7 +13,6 @@ export default function Configuracion() {
     nombre: cfg.empresa.nombre, nit: cfg.empresa.nit, grupo: cfg.empresa.grupo, usuario: cfg.usuario,
     rojo: cfg.semaforo.rojo, amarillo: cfg.semaforo.amarillo, invimaAviso: cfg.invimaAviso,
     limiteFaltantes: cfg.limiteFaltantes, frioMin: cfg.frio.min, frioMax: cfg.frio.max,
-    ubicaciones: cfg.ubicaciones.join(', '),
     consumoDias: cfg.reabastecimiento.consumoDias, seguridadDias: cfg.reabastecimiento.seguridadDias, coberturaDias: cfg.reabastecimiento.coberturaDias,
     metodoActual: C.metodoDe(cfg, hoy + ''), metodoSiguiente: (cfg.metodos || {})[String(year + 1)] || C.metodoDe(cfg, hoy)
   }));
@@ -28,12 +27,6 @@ export default function Configuracion() {
     if (!f.nombre.trim()) e.push('El nombre de la empresa es obligatorio.');
     if (!(Number(f.rojo) > 0) || !(Number(f.amarillo) > Number(f.rojo))) e.push('El umbral amarillo debe ser mayor que el rojo y ambos positivos.');
     if (!(Number(f.frioMax) > Number(f.frioMin))) e.push('El máximo de temperatura debe ser mayor que el mínimo.');
-    const ubic = f.ubicaciones.split(',').map((s) => s.trim()).filter(Boolean);
-    if (!ubic.length) e.push('Defina al menos una bodega.');
-    const enUso = new Set([...db.movimientos.flatMap((m) => [m.bodega, m.bodegaDestino, ...m.lineas.map((l) => l.bodega)]), ...db.usuarios.map((u) => u.bodega)].filter(Boolean));
-    const quitadas = cfg.ubicaciones.filter((b) => !ubic.includes(b) && enUso.has(b));
-    if (quitadas.length) e.push('No se puede quitar ' + quitadas.join(', ') + ': tiene movimientos o usuarios asignados.');
-    if (ubic[0] !== cfg.ubicaciones[0] && db.movimientos.some((m) => !m.bodega)) e.push('La primera bodega es la principal y no se puede cambiar de posición.');
     if (!(Number(f.consumoDias) > 0)) e.push('Los días de consumo para el reabastecimiento deben ser mayores que cero.');
     if (movsAnio && f.metodoActual !== C.metodoDe(cfg, hoy)) e.push('El año ' + year + ' ya tiene movimientos: el método debe ser uniforme todo el año. Programe el cambio para ' + (year + 1) + '.');
     if (e.length) return setErr(e);
@@ -44,7 +37,6 @@ export default function Configuracion() {
       d.config.invimaAviso = Number(f.invimaAviso) || 0;
       d.config.limiteFaltantes = Number(f.limiteFaltantes) || 0;
       d.config.frio = { min: Number(f.frioMin), max: Number(f.frioMax) };
-      d.config.ubicaciones = ubic;
       d.config.reabastecimiento = { consumoDias: Number(f.consumoDias), seguridadDias: Number(f.seguridadDias) || 0, coberturaDias: Number(f.coberturaDias) || 0 };
       d.config.metodos = Object.assign({}, d.config.metodos);
       // Los años anteriores con movimientos conservan el método con el que se valoraron.
@@ -123,7 +115,8 @@ export default function Configuracion() {
           <Field label="Límite de faltantes (%)" hint="ET art. 64"><input className="input" type="number" min="0" step="0.1" value={f.limiteFaltantes} onChange={set('limiteFaltantes')} /></Field>
           <Field label="Cadena de frío mínimo (°C)"><input className="input" type="number" step="0.1" value={f.frioMin} onChange={set('frioMin')} /></Field>
           <Field label="Cadena de frío máximo (°C)"><input className="input" type="number" step="0.1" value={f.frioMax} onChange={set('frioMax')} /></Field>
-          <Field label="Bodegas" full hint="Separadas por coma. La primera es la bodega principal. Incluya consultorios y neveras si guardan existencias."><input className="input" value={f.ubicaciones} onChange={set('ubicaciones')} /></Field>
+          <Field label="Bodegas" hint={cfg.ubicaciones.length + ' bodegas activas'}><Btn onClick={() => go('bodegas')}>Administrar bodegas</Btn></Field>
+          <Field label="Grupos de productos" hint={db.grupos.length + ' grupos'}><Btn onClick={() => go('grupos')}>Administrar grupos</Btn></Field>
         </div>
         <div className="section-title">Reabastecimiento</div>
         <div className="form-grid">

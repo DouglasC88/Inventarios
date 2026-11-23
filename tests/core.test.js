@@ -225,3 +225,41 @@ test('requisición queda atendida cuando el traslado cubre lo pedido', () => {
   add(db, { tipo: 'traslado', fecha: '2026-02-01', bodega: 'Principal', bodegaDestino: 'C1', requisicionId: 'r1', lineas: [{ productoId: 'a', lote: 'L1', vence: '2027-01-01', cantidad: 3 }] });
   assert.equal(C.estadoRequisicion(db, db.requisiciones[0]).estado, 'atendida');
 });
+
+test('lote en cuarentena o bloqueado no se entrega y FEFO lo omite', () => {
+  const db = base();
+  const e1 = add(db, ent('2026-01-10', [
+    { productoId: 'a', lote: 'Q1', vence: '2026-12-01', cantidad: 5, costoUnit: 1 },
+    { productoId: 'a', lote: 'OK', vence: '2027-12-01', cantidad: 5, costoUnit: 1 }
+  ]));
+  C.asegurarLotes(db, e1);
+  assert.equal(db.lotes.length, 2);
+  C.buscarLote(db, 'a', 'q1').estado = 'cuarentena';
+  const st = C.replay(db);
+  const r = C.sugerirFEFO(st, 'a', 3, HOY);
+  assert.deepEqual(r.asignacion.map((x) => x.lote), ['OK']);
+  const e = C.validarMovimiento(db, { id: 's', tipo: 'salida', fecha: '2026-02-01', destino: 'X', lineas: [{ productoId: 'a', lote: 'Q1', vence: '2026-12-01', cantidad: 1 }] }, HOY);
+  assert.ok(e.some((x) => x.includes('cuarentena')));
+});
+
+test('un lote existente no puede recibirse con otra fecha de vencimiento', () => {
+  const db = base();
+  C.asegurarLotes(db, add(db, ent('2026-01-10', [{ productoId: 'a', lote: 'L1', vence: '2027-01-01', cantidad: 5, costoUnit: 1 }])));
+  const e = C.validarMovimiento(db, ent('2026-02-10', [{ productoId: 'a', lote: 'L1', vence: '2027-05-01', cantidad: 5, costoUnit: 1 }]), HOY);
+  assert.ok(e.some((x) => x.includes('ya existe con vencimiento')));
+});
+
+test('bodegas: sincronizar activas y renombrar en cascada', () => {
+  const db = base();
+  db.bodegas = [
+    { id: '1', nombre: 'Central', activa: true },
+    { id: '2', nombre: 'Cons A', activa: true, principal: true },
+    { id: '3', nombre: 'Vieja', activa: false }
+  ];
+  C.sincronizarBodegas(db);
+  assert.deepEqual(db.config.ubicaciones, ['Cons A', 'Central']);
+  add(db, ent('2026-01-10', [{ productoId: 'a', lote: 'L1', vence: '2027-01-01', cantidad: 5, costoUnit: 1 }], { bodega: 'Central' }));
+  assert.ok(C.bodegaEnUso(db, 'Central'));
+  C.renombrarBodega(db, 'Central', 'Bodega central');
+  assert.equal(db.movimientos[0].bodega, 'Bodega central');
+});

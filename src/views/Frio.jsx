@@ -61,10 +61,10 @@ export default function Frio() {
           <div className="tbl-wrap" style={{ padding: 12, marginBottom: 14 }}>
             <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label="Temperaturas de los últimos 30 días">
               <rect x="30" y={Y(db.config.frio.max)} width={W - 50} height={Y(db.config.frio.min) - Y(db.config.frio.max)} fill="rgba(43,245,160,0.08)" stroke="rgba(43,245,160,0.35)" strokeDasharray="4 4" />
-              <text x="4" y={Y(db.config.frio.max) + 4} fill="#8aa2c8" fontSize="10">{db.config.frio.max}°</text>
-              <text x="4" y={Y(db.config.frio.min) + 4} fill="#8aa2c8" fontSize="10">{db.config.frio.min}°</text>
-              <polyline fill="none" stroke="#22e3ff" strokeWidth="2" points={temps.map((t, i) => X(i) + ',' + Y(t.temp)).join(' ')} style={{ filter: 'drop-shadow(0 0 6px rgba(34,227,255,0.8))' }} />
-              {temps.map((t, i) => <circle key={t.id} cx={X(i)} cy={Y(t.temp)} r="4" fill={C.tempEnRango(t, db.config) ? '#22e3ff' : '#ff3d9a'}><title>{fechaHora(t.fecha)} · {t.temp} °C</title></circle>)}
+              <text x="4" y={Y(db.config.frio.max) + 4} fill="#55657f" fontSize="10">{db.config.frio.max}°</text>
+              <text x="4" y={Y(db.config.frio.min) + 4} fill="#55657f" fontSize="10">{db.config.frio.min}°</text>
+              <polyline fill="none" stroke="#00a8e8" strokeWidth="2" points={temps.map((t, i) => X(i) + ',' + Y(t.temp)).join(' ')} style={{ filter: 'drop-shadow(0 0 6px rgba(34,227,255,0.8))' }} />
+              {temps.map((t, i) => <circle key={t.id} cx={X(i)} cy={Y(t.temp)} r="4" fill={C.tempEnRango(t, db.config) ? '#00a8e8' : '#ff2d95'}><title>{fechaHora(t.fecha)} · {t.temp} °C</title></circle>)}
             </svg>
           </div>
         )}

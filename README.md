@@ -4,7 +4,7 @@ Sistema de inventario para consultorios, clínicas odontológicas e IPS, diseña
 para cumplir desde el inicio las normas contables, tributarias y sanitarias de
 Colombia, con referencia a las normas internacionales.
 
-Aplicación JavaScript (React + Vite) con interfaz futurista tipo HUD.
+Aplicación JavaScript (React + Vite) con interfaz futurista tipo HUD en blanco con acentos neón.
 
 **Producción:** https://fluxstock-indol.vercel.app/ (despliegue automático de Vercel desde `main`).
 
@@ -12,7 +12,8 @@ Aplicación JavaScript (React + Vite) con interfaz futurista tipo HUD.
 
 | Área | Módulo | Qué hace | Norma o referencia |
 | --- | --- | --- | --- |
-| Operación | Centro de control | Valor del inventario, alertas e indicador de cumplimiento | — |
+| Operación | Centro de control | Acciones rápidas, valor del inventario por grupo, alertas e indicador de cumplimiento | — |
+| | Guía de uso | Primeros pasos y cómo hacer una orden de compra, una entrada, un lote | — |
 | | Entradas | Compras con factura electrónica o documento soporte, con o sin orden de compra; lote, vencimiento, lectura GS1/UDI, unidad de compra y prorrateo de costos adicionales | ET art. 771-2, NIC 2 |
 | | Salidas y consumos | Consumo por paciente, consultorio, servicio o procedimiento; kits; lotes por FEFO dentro de la bodega | Res. 1403/2007 |
 | | Traslados | Movimiento entre bodegas, consultorios y neveras conservando lote | — |
@@ -28,7 +29,10 @@ Aplicación JavaScript (React + Vite) con interfaz futurista tipo HUD.
 | | Cadena de frío | Registro de temperaturas y alertas fuera de rango | Res. 3100/2019 |
 | | Reportes | Inventario valorado a cualquier fecha, ABC, rotación, consumos por destino, sin movimiento, libro de movimientos | Kardex tipo A2 |
 | | Cierres | Bloqueo del periodo y deterioro por valor neto realizable con reversión | NIC 2 / Secc. 13 |
-| Maestros | Productos | Ficha sanitaria (INVIMA, riesgo, GTIN, cadena de frío), unidad de compra, proveedor preferido | Res. 3100/2019, Dec. 4725/2005 |
+| Maestros | Bodegas | Bodega principal, consultorios, neveras, cuarentena y sedes: código, tipo, responsable; cambio de nombre en cascada | Res. 3100/2019 (almacenamiento) |
+| | Grupos de productos | Líneas o familias para filtrar y analizar valor | Grupos tipo A2 / SAP |
+| | Lotes | Maestro de lotes con fabricación, vencimiento y estado (liberado, cuarentena, bloqueado) | Res. 1403/2007, Res. 4816/2008 |
+| | Productos | Ficha sanitaria (INVIMA, riesgo, GTIN, cadena de frío), unidad de compra, proveedor preferido | Res. 3100/2019, Dec. 4725/2005 |
 | | Kits por procedimiento | Insumos por procedimiento odontológico | — |
 | | Proveedores | Factura electrónica o documento soporte | ET art. 771-2 |
 | Sistema | Importar | Productos y saldo inicial desde Excel (.xlsx) o CSV | Migración desde A2 u otros |

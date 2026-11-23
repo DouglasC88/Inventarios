@@ -43,10 +43,10 @@ export function FormProveedor({ inicial, onClose, onGuardado }) {
   );
 }
 
-export default function Proveedores() {
+export default function Proveedores({ arg }) {
   const { db, state, puede } = useStore();
   const [q, setQ] = useState('');
-  const [editar, setEditar] = useState(null);
+  const [editar, setEditar] = useState(arg === 'nuevo' ? {} : null);
   const lista = db.proveedores.filter((p) => (p.nombre + ' ' + p.nit).toLowerCase().includes(q.toLowerCase()));
   const compras = (id) => db.movimientos.filter((m) => !m.anulado && m.tipo === 'entrada' && m.proveedorId === id)
     .reduce((s, m) => s + (state.movCost[m.id]?.total || 0), 0);

@@ -35,6 +35,12 @@ export function NuevaEntrada({ onClose, ordenInicial }) {
   const setHk = (k) => (e) => setH((x) => Object.assign({}, x, { [k]: e.target.value }));
   const setL = (i, k, v) => setLineas((ls) => ls.map((l, j) => (j === i ? Object.assign({}, l, { [k]: v }) : l)));
   const prod = (id) => db.productos.find((p) => p.id === id);
+  const lotesDe = (id) => db.lotes.filter((x) => x.productoId === id);
+  const setLote = (i, v) => setLineas((ls) => ls.map((l, j) => {
+    if (j !== i) return l;
+    const ex = l.productoId ? C.buscarLote(db, l.productoId, v) : null;
+    return Object.assign({}, l, { lote: v }, ex && ex.vence ? { vence: ex.vence } : {});
+  }));
 
   const elegirProveedor = (id) => {
     const p = db.proveedores.find((x) => x.id === id);
@@ -81,6 +87,7 @@ export function NuevaEntrada({ onClose, ordenInicial }) {
     <Modal open wide title="Nueva entrada de mercancía" icon={PackagePlus} onClose={onClose}
       footer={<><span className="muted" style={{ marginRight: 'auto' }}>Subtotal {money(subtotal)} + costos adicionales {money(h.costosAdic)}</span><Btn onClick={onClose}>Cancelar</Btn><Btn variant="primary" onClick={guardar}>Registrar entrada</Btn></>}>
       <Errores lista={err} />
+      <div className="section-title" style={{ marginTop: 0 }}>1 · Documento de compra</div>
       <div className="form-grid">
         <Field label="Orden de compra" hint="Opcional: trae las cantidades pendientes">
           <select className="select input" value={h.ordenId} onChange={(e) => elegirOrden(e.target.value)}>
@@ -109,7 +116,7 @@ export function NuevaEntrada({ onClose, ordenInicial }) {
         <Field label="Nota"><input className="input" value={h.nota} onChange={setHk('nota')} /></Field>
       </div>
 
-      <div className="section-title">Líneas</div>
+      <div className="section-title">2 · Productos recibidos (uno por lote)</div>
       <div className="scanbox" style={{ marginBottom: 12 }}>
         <ScanBarcode size={20} />
         <input className="input mono" value={scan} onChange={(e) => setScan(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); leer(); } }}
@@ -118,14 +125,18 @@ export function NuevaEntrada({ onClose, ordenInicial }) {
       </div>
       <div className="tbl-wrap lines">
         <table className="tbl">
-          <thead><tr><th style={{ minWidth: 230 }}>Producto</th><th>Lote</th><th>Vence</th><th className="num">Cantidad</th><th>Unidad</th><th className="num">Costo unit. (sin IVA descontable)</th><th className="num">Total</th><th /></tr></thead>
+          <thead><tr><th style={{ minWidth: 230 }}>Producto</th><th>Número de lote</th><th>Fecha de vencimiento</th><th className="num">Cantidad</th><th>Unidad</th><th className="num">Costo unit. (sin IVA descontable)</th><th className="num">Total</th><th /></tr></thead>
           <tbody>
             {lineas.map((l, i) => {
               const p = prod(l.productoId);
               return (
                 <tr key={i}>
                   <td><SelectProducto value={l.productoId} onChange={(v) => setL(i, 'productoId', v)} /></td>
-                  <td><input className="input mono" value={l.lote} onChange={(e) => setL(i, 'lote', e.target.value)} style={{ minWidth: 110 }} /></td>
+                  <td>
+                    <input className="input mono" value={l.lote} onChange={(e) => setLote(i, e.target.value)} style={{ minWidth: 120 }} list={'lotes-ent-' + i} placeholder="Ej.: L2409A" />
+                    <datalist id={'lotes-ent-' + i}>{lotesDe(l.productoId).map((x) => <option key={x.id} value={x.lote}>{'vence ' + x.vence + ' · ' + (C.ESTADOS_LOTE[x.estado] || '')}</option>)}</datalist>
+                    {l.productoId && l.lote && C.buscarLote(db, l.productoId, l.lote) && <div className="small cyan-t">Lote existente</div>}
+                  </td>
                   <td><input className="input" type="date" value={l.vence} onChange={(e) => setL(i, 'vence', e.target.value)} /></td>
                   <td><input className="input num" type="number" min="0" value={l.cantidad} onChange={(e) => setL(i, 'cantidad', e.target.value)} style={{ width: 96 }} /></td>
                   <td><SelectUnidad producto={p} value={l.enCompra} onChange={(v) => setL(i, 'enCompra', v)} /></td>
@@ -142,7 +153,8 @@ export function NuevaEntrada({ onClose, ordenInicial }) {
         <Btn size="sm" icon={Plus} onClick={() => setLineas((ls) => [...ls, lineaVacia()])}>Agregar línea</Btn>
       </div>
       <Nota>
-        Se bloquea la entrada si falta la factura electrónica o el documento soporte, si el producto no tiene registro INVIMA vigente o si el lote ya está vencido.
+        <b>Cómo llenar:</b> elija el producto, escriba el número de lote del empaque (si ya existe, se completa la fecha de vencimiento) y la fecha de vencimiento del empaque.
+        Si el mismo producto llega en dos lotes, use una línea por lote. Se bloquea la entrada si falta la factura electrónica o el documento soporte, si el producto no tiene registro INVIMA vigente o si el lote ya está vencido.
         Si compra por empaque (caja, bolsa), elija esa unidad: el sistema convierte la cantidad y el costo a la unidad de consumo. El IVA descontable no hace parte del costo.
       </Nota>
       {nuevoProv && <FormProveedor onClose={() => setNuevoProv(false)} onGuardado={(p) => setH((x) => Object.assign({}, x, { proveedorId: p.id, docTipo: p.obligadoFacturar ? 'FE' : 'DS' }))} />}
@@ -150,9 +162,9 @@ export function NuevaEntrada({ onClose, ordenInicial }) {
   );
 }
 
-export default function Entradas() {
+export default function Entradas({ arg }) {
   const { puede } = useStore();
-  const [nueva, setNueva] = useState(false);
+  const [nueva, setNueva] = useState(arg === 'nuevo');
   return (
     <Panel title="Entradas de mercancía" icon={PackagePlus}
       sub="Compras soportadas con factura electrónica o documento soporte, con o sin orden de compra. Cada línea registra lote y vencimiento."

@@ -5,7 +5,7 @@ import { Btn, Chip, Empty, Errores, Field, Modal, Panel, SearchBox, Tabs } from 
 import { money, num, fecha, INVIMA } from '../format.js';
 
 const VACIO = {
-  codigo: '', nombre: '', categoria: 'dispositivo', unidad: 'unidad', stockMin: 0, ubicacion: '',
+  codigo: '', nombre: '', categoria: 'dispositivo', grupoId: '', unidad: 'unidad', stockMin: 0, ubicacion: '',
   fabricante: '', gtin: '', requiereInvima: true, invima: '', invimaVence: '', riesgo: 'I',
   cadenaFrio: false, vnrUnit: '', activo: true, unidadCompra: '', factorCompra: 1, leadTime: 7, proveedorId: ''
 };
@@ -57,7 +57,13 @@ export function FormProducto({ inicial, onClose }) {
             {Object.entries(C.CATEGORIAS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
         </Field>
-        <Field label="Unidad de medida"><input className="input" value={f.unidad} onChange={set('unidad')} /></Field>
+        <Field label="Grupo" hint={db.grupos.length ? '' : 'Cree los grupos en Maestros › Grupos de productos'}>
+          <select className="select input" value={f.grupoId} onChange={set('grupoId')}>
+            <option value="">Sin grupo</option>
+            {db.grupos.map((g) => <option key={g.id} value={g.id}>{g.codigo} · {g.nombre}</option>)}
+          </select>
+        </Field>
+        <Field label="Unidad de medida (consumo)"><input className="input" value={f.unidad} onChange={set('unidad')} /></Field>
         <Field label="Stock mínimo" hint="Según frecuencia de uso y esterilización (Res. 3100)"><input className="input" type="number" min="0" value={f.stockMin} onChange={set('stockMin')} /></Field>
         <Field label="Bodega habitual">
           <select className="select input" value={f.ubicacion} onChange={set('ubicacion')}>
@@ -107,13 +113,16 @@ export function FormProducto({ inicial, onClose }) {
   );
 }
 
-export default function Productos() {
+export default function Productos({ arg }) {
   const { db, state, hoy, go, puede } = useStore();
   const [q, setQ] = useState('');
   const [cat, setCat] = useState('todas');
-  const [editar, setEditar] = useState(null);
+  const [grupo, setGrupo] = useState(arg && arg.startsWith('grupo:') ? arg.slice(6) : 'todos');
+  const [editar, setEditar] = useState(arg === 'nuevo' ? {} : null);
+  const nombreGrupo = (id) => (db.grupos.find((g) => g.id === id) || {}).nombre || '';
   const lista = db.productos.filter((p) =>
     (cat === 'todas' || p.categoria === cat) &&
+    (grupo === 'todos' || (grupo === 'sin' ? !nombreGrupo(p.grupoId) : p.grupoId === grupo)) &&
     (p.nombre + ' ' + p.codigo + ' ' + (p.invima || '')).toLowerCase().includes(q.toLowerCase()));
 
   return (
@@ -121,13 +130,18 @@ export default function Productos() {
       actions={puede('maestros') && <Btn variant="primary" icon={Plus} onClick={() => setEditar({})}>Nuevo producto</Btn>}>
       <div className="toolbar">
         <SearchBox value={q} onChange={setQ} placeholder="Buscar por nombre, código o INVIMA" />
+        <select className="select input" value={grupo} onChange={(e) => setGrupo(e.target.value)} style={{ maxWidth: 240 }}>
+          <option value="todos">Todos los grupos</option>
+          {db.grupos.map((g) => <option key={g.id} value={g.id}>{g.nombre}</option>)}
+          <option value="sin">Sin grupo</option>
+        </select>
         <Tabs value={cat} onChange={setCat} options={[['todas', 'Todas'], ...Object.entries(C.CATEGORIAS)]} />
       </div>
       {lista.length ? (
         <div className="tbl-wrap">
           <table className="tbl">
             <thead>
-              <tr><th>Código</th><th>Producto</th><th>Categoría</th><th className="num">Existencia</th><th className="num">Costo prom.</th><th className="num">Valor</th><th>INVIMA</th><th>Riesgo</th><th /></tr>
+              <tr><th>Código</th><th>Producto</th><th>Grupo / categoría</th><th className="num">Existencia</th><th className="num">Costo prom.</th><th className="num">Valor</th><th>INVIMA</th><th>Riesgo</th><th /></tr>
             </thead>
             <tbody>
               {lista.map((p) => {
@@ -143,7 +157,7 @@ export default function Productos() {
                       <div className="small muted">mín. {num(p.stockMin)} {p.unidad}{p.unidadCompra ? ' · compra: ' + p.unidadCompra : ''}</div>
                       <div className="stockbod">{Object.entries(C.existenciasPorBodega(db, state, p.id)).filter(([, v]) => v > 0).map(([b, v]) => <span key={b}>{b}: {num(v)}</span>)}</div>
                     </td>
-                    <td>{C.CATEGORIAS[p.categoria]}</td>
+                    <td>{nombreGrupo(p.grupoId) || <span className="muted">Sin grupo</span>}<div className="small muted">{C.CATEGORIAS[p.categoria]}</div></td>
                     <td className={'num' + (bajo ? ' red-t' : '')}>{num(qty)} <span className="muted small">{p.unidad}</span></td>
                     <td className="num">{money(qty > 0 ? s.value / qty : s?.ultimoCosto || 0)}</td>
                     <td className="num">{money(s ? s.value : 0)}</td>

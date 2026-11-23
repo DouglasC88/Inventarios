@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-  ArrowRightLeft, BarChart3, Boxes, CalendarClock, ClipboardCheck, ClipboardList, FileSpreadsheet, Hexagon, Layers,
+  ArrowRightLeft, BarChart3, Boxes, CalendarClock, ClipboardCheck, ClipboardList, Compass, FileSpreadsheet, FolderTree, Hexagon, Layers, Tags, Warehouse,
   LayoutDashboard, Lock, LogOut, Menu, PackageMinus, PackagePlus, RefreshCcw, Scale, ScanSearch, ScrollText,
   Settings, ShoppingCart, SlidersHorizontal, Thermometer, Truck, Undo2, UsersRound
 } from 'lucide-react';
@@ -30,11 +30,16 @@ import Configuracion from './views/Configuracion.jsx';
 import Usuarios from './views/Usuarios.jsx';
 import Importar from './views/Importar.jsx';
 import Login from './views/Login.jsx';
+import Bodegas from './views/Bodegas.jsx';
+import Grupos from './views/Grupos.jsx';
+import LotesMaestro from './views/LotesMaestro.jsx';
+import Guia from './views/Guia.jsx';
 
 // [clave, título, ícono, vista, permiso requerido para verla (opcional)]
 const NAV = [
   ['Operación', [
     ['panel', 'Centro de control', LayoutDashboard, Dashboard],
+    ['guia', 'Guía de uso', Compass, Guia],
     ['entradas', 'Entradas', PackagePlus, Entradas],
     ['salidas', 'Salidas y consumos', PackageMinus, Salidas],
     ['traslados', 'Traslados', ArrowRightLeft, Traslados],
@@ -49,14 +54,17 @@ const NAV = [
   ]],
   ['Control', [
     ['kardex', 'Kardex', ScrollText, Kardex],
-    ['lotes', 'Lotes y vencimientos', CalendarClock, Lotes],
+    ['vencimientos', 'Vencimientos', CalendarClock, Lotes],
     ['trazabilidad', 'Trazabilidad', ScanSearch, Trazabilidad],
     ['frio', 'Cadena de frío', Thermometer, Frio],
     ['reportes', 'Reportes y análisis', BarChart3, Reportes],
     ['cierres', 'Cierres de periodo', Lock, Cierres]
   ]],
   ['Maestros', [
+    ['bodegas', 'Bodegas', Warehouse, Bodegas],
+    ['grupos', 'Grupos de productos', FolderTree, Grupos],
     ['productos', 'Productos', Boxes, Productos],
+    ['lotes', 'Lotes', Tags, LotesMaestro],
     ['kits', 'Kits por procedimiento', Layers, Kits],
     ['proveedores', 'Proveedores', Truck, Proveedores]
   ]],
@@ -141,7 +149,7 @@ export default function App() {
               </div>
             )}
           </header>
-          <Vista arg={ruta.arg} />
+          <Vista key={ruta.vista + '/' + ruta.arg} arg={ruta.arg} />
         </main>
       </div>
       <Toasts items={toasts} />

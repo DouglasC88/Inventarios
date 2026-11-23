@@ -16,7 +16,24 @@ export function crearDemo(hoy) {
   const BP = 'Bodega principal', C1 = 'Consultorio 1', C2 = 'Consultorio 2', NV = 'Nevera de insumos';
   db.config.empresa = { nombre: 'Clínica Dental Demo S.A.S.', nit: '900.000.000-1', grupo: '2' };
   db.config.usuario = 'Administrador general';
-  db.config.ubicaciones = [BP, C1, C2, NV];
+  db.bodegas = [
+    { id: 'b1', codigo: 'BP', nombre: BP, tipo: 'bodega', responsable: 'Almacenista', sede: 'Sede principal', activa: true, principal: true },
+    { id: 'b2', codigo: 'C1', nombre: C1, tipo: 'consultorio', responsable: 'Dra. Pérez', sede: 'Sede principal', activa: true },
+    { id: 'b3', codigo: 'C2', nombre: C2, tipo: 'consultorio', responsable: 'Dr. Martínez', sede: 'Sede principal', activa: true },
+    { id: 'b4', codigo: 'NV', nombre: NV, tipo: 'nevera', responsable: 'Auxiliar de odontología', sede: 'Sede principal', activa: true }
+  ];
+  C.sincronizarBodegas(db);
+  db.grupos = [
+    { id: 'g1', codigo: 'RES', nombre: 'Resinas y adhesivos', descripcion: 'Materiales de restauración directa' },
+    { id: 'g2', codigo: 'ANE', nombre: 'Anestésicos', descripcion: 'Anestésicos locales y tópicos' },
+    { id: 'g3', codigo: 'BIO', nombre: 'Bioseguridad', descripcion: 'Guantes, tapabocas, campos y barreras' },
+    { id: 'g4', codigo: 'IMP', nombre: 'Implantología', descripcion: 'Implantes y componentes protésicos' },
+    { id: 'g5', codigo: 'ROT', nombre: 'Instrumental rotatorio', descripcion: 'Fresas y piedras' },
+    { id: 'g6', codigo: 'IMR', nombre: 'Impresión', descripcion: 'Alginatos y siliconas' },
+    { id: 'g7', codigo: 'DES', nombre: 'Desinfección y endodoncia', descripcion: 'Irrigantes y desinfectantes' },
+    { id: 'g8', codigo: 'PRO', nombre: 'Profilaxis', descripcion: 'Cepillos, copas y pastas' },
+    { id: 'g9', codigo: 'AGU', nombre: 'Agujas y jeringas', descripcion: 'Agujas dentales y carpules' }
+  ];
 
   db.usuarios = USUARIOS_DEMO.map(([usuario, nombre, rol, pin, bodega]) => ({
     id: 'u-' + usuario, usuario, nombre, rol, bodega, activo: true, pinHash: C.hashPin(usuario, pin)
@@ -36,17 +53,17 @@ export function crearDemo(hoy) {
   }, extra || {});
 
   db.productos = [
-    P('p1', 'RES-A3', 'Resina compuesta tono A3, jeringa 4 g', 'dispositivo', 'IIa', 'jeringa', 10, { invima: 'INVIMA 2021DM-0012345', invimaVence: d(1100), gtin: '07701234500025', unidadCompra: 'caja x6', factorCompra: 6, leadTime: 5 }),
-    P('p2', 'GUA-NIT-M', 'Guantes de nitrilo talla M, caja x100', 'dispositivo', 'I', 'caja', 15, { invima: 'INVIMA 2019DM-0004567', invimaVence: d(60), leadTime: 3 }),
-    P('p3', 'LID-2E', 'Lidocaína 2 % con epinefrina, cartucho 1,8 mL', 'medicamento', 'N/A', 'cartucho', 60, { invima: 'INVIMA 2020M-0011223', invimaVence: d(800), unidadCompra: 'caja x50', factorCompra: 50, proveedorId: 'pv2', leadTime: 10 }),
-    P('p4', 'HIP-525', 'Hipoclorito de sodio 5,25 %, frasco 1 L', 'insumo', 'N/A', 'frasco', 6, { proveedorId: 'pv3', leadTime: 2 }),
-    P('p5', 'ION-VID', 'Ionómero de vidrio restaurador, kit', 'dispositivo', 'IIa', 'kit', 3, { invima: 'INVIMA 2022DM-0020001', invimaVence: d(1400) }),
-    P('p6', 'AGU-30G', 'Aguja dental corta 30G', 'dispositivo', 'IIa', 'unidad', 100, { invima: 'INVIMA 2018DM-0003210', invimaVence: d(500), unidadCompra: 'caja x100', factorCompra: 100, proveedorId: 'pv2' }),
-    P('p7', 'IMP-410', 'Implante dental 4,1 x 10 mm', 'dispositivo', 'III', 'unidad', 4, { invima: 'INVIMA 2023DM-0031415', invimaVence: d(1600), gtin: '07701234500018', proveedorId: 'pv2', leadTime: 15 }),
-    P('p8', 'ALG-450', 'Alginato de fraguado normal, 450 g', 'dispositivo', 'I', 'bolsa', 5, { invima: 'INVIMA 2020DM-0009988', invimaVence: d(900), vnrUnit: 22000 }),
-    P('p9', 'ADH-UNI', 'Adhesivo universal, frasco 5 mL', 'dispositivo', 'IIa', 'frasco', 3, { invima: 'INVIMA 2021DM-0016161', invimaVence: d(1200), cadenaFrio: true, ubicacion: NV, proveedorId: 'pv2' }),
-    P('p10', 'FRE-DIA', 'Fresas de diamante surtidas, x10', 'dispositivo', 'I', 'paquete', 4, { invima: 'INVIMA 2017DM-0001122', invimaVence: d(700) }),
-    P('p11', 'CEP-IMP', 'Cepillo de profilaxis', 'insumo', 'N/A', 'unidad', 40, { unidadCompra: 'bolsa x50', factorCompra: 50, leadTime: 4 })
+    P('p1', 'RES-A3', 'Resina compuesta tono A3, jeringa 4 g', 'dispositivo', 'IIa', 'jeringa', 10, { invima: 'INVIMA 2021DM-0012345', invimaVence: d(1100), gtin: '07701234500025', unidadCompra: 'caja x6', factorCompra: 6, leadTime: 5, grupoId: 'g1' }),
+    P('p2', 'GUA-NIT-M', 'Guantes de nitrilo talla M, caja x100', 'dispositivo', 'I', 'caja', 15, { invima: 'INVIMA 2019DM-0004567', invimaVence: d(60), leadTime: 3, grupoId: 'g3' }),
+    P('p3', 'LID-2E', 'Lidocaína 2 % con epinefrina, cartucho 1,8 mL', 'medicamento', 'N/A', 'cartucho', 60, { invima: 'INVIMA 2020M-0011223', invimaVence: d(800), unidadCompra: 'caja x50', factorCompra: 50, proveedorId: 'pv2', leadTime: 10, grupoId: 'g2' }),
+    P('p4', 'HIP-525', 'Hipoclorito de sodio 5,25 %, frasco 1 L', 'insumo', 'N/A', 'frasco', 6, { proveedorId: 'pv3', leadTime: 2, grupoId: 'g7' }),
+    P('p5', 'ION-VID', 'Ionómero de vidrio restaurador, kit', 'dispositivo', 'IIa', 'kit', 3, { invima: 'INVIMA 2022DM-0020001', invimaVence: d(1400), grupoId: 'g1' }),
+    P('p6', 'AGU-30G', 'Aguja dental corta 30G', 'dispositivo', 'IIa', 'unidad', 100, { invima: 'INVIMA 2018DM-0003210', invimaVence: d(500), unidadCompra: 'caja x100', factorCompra: 100, proveedorId: 'pv2', grupoId: 'g9' }),
+    P('p7', 'IMP-410', 'Implante dental 4,1 x 10 mm', 'dispositivo', 'III', 'unidad', 4, { invima: 'INVIMA 2023DM-0031415', invimaVence: d(1600), gtin: '07701234500018', proveedorId: 'pv2', leadTime: 15, grupoId: 'g4' }),
+    P('p8', 'ALG-450', 'Alginato de fraguado normal, 450 g', 'dispositivo', 'I', 'bolsa', 5, { invima: 'INVIMA 2020DM-0009988', invimaVence: d(900), vnrUnit: 22000, grupoId: 'g6' }),
+    P('p9', 'ADH-UNI', 'Adhesivo universal, frasco 5 mL', 'dispositivo', 'IIa', 'frasco', 3, { invima: 'INVIMA 2021DM-0016161', invimaVence: d(1200), cadenaFrio: true, ubicacion: NV, proveedorId: 'pv2', grupoId: 'g1' }),
+    P('p10', 'FRE-DIA', 'Fresas de diamante surtidas, x10', 'dispositivo', 'I', 'paquete', 4, { invima: 'INVIMA 2017DM-0001122', invimaVence: d(700), grupoId: 'g5' }),
+    P('p11', 'CEP-IMP', 'Cepillo de profilaxis', 'insumo', 'N/A', 'unidad', 40, { unidadCompra: 'bolsa x50', factorCompra: 50, leadTime: 4, grupoId: 'g8' })
   ];
 
   db.kits = [
@@ -60,6 +77,7 @@ export function crearDemo(hoy) {
     m.num = C.siguienteNumero(db, tipo);
     m.orden = C.siguienteOrden(db);
     db.movimientos.push(m);
+    C.asegurarLotes(db, m);
     return m;
   };
   const L = (productoId, lote, vence, cantidad, costoUnit) => ({ productoId, lote, vence, cantidad, costoUnit });
@@ -144,6 +162,11 @@ export function crearDemo(hoy) {
   });
   db.ordenes.push({ id: 'oc3', num: C.siguienteNumero(db, 'orden'), fecha: d(-3), proveedorId: 'pv2', fechaEntrega: d(7), estado: 'abierta', nota: 'Reposición de implantes', usuario: 'Almacenista', lineas: [
     { productoId: 'p7', cantidad: 4, costoUnit: 415000 }] });
+
+  const adh = C.buscarLote(db, 'p9', 'AU-4410');
+  adh.estado = 'cuarentena';
+  adh.motivo = 'Temperatura de 9,1 °C en la nevera; en evaluación antes de liberar';
+  for (const l of db.lotes) if (!l.fabricado && l.vence) l.fabricado = C.addDays(l.vence, -730);
 
   for (let i = 10; i >= 0; i--) {
     const fuera = i === 6;

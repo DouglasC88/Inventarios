@@ -105,9 +105,9 @@ function DetalleRequisicion({ rq, onClose, onAtender }) {
   );
 }
 
-export default function Requisiciones() {
+export default function Requisiciones({ arg }) {
   const { db, puede, usuario } = useStore();
-  const [nueva, setNueva] = useState(false);
+  const [nueva, setNueva] = useState(arg === 'nuevo');
   const [ver, setVer] = useState(null);
   const [atender, setAtender] = useState(null);
   const [tab, setTab] = useState('abiertas');

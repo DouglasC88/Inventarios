@@ -112,9 +112,9 @@ function DetalleOrden({ orden, onClose, onRecibir }) {
   );
 }
 
-export default function Ordenes() {
+export default function Ordenes({ arg }) {
   const { db, puede } = useStore();
-  const [nueva, setNueva] = useState(false);
+  const [nueva, setNueva] = useState(arg === 'nuevo');
   const [ver, setVer] = useState(null);
   const [recibir, setRecibir] = useState(null);
   const [tab, setTab] = useState('abiertas');

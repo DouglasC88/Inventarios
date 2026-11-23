@@ -1,12 +1,21 @@
-import { Activity, Boxes, CalendarClock, Layers, ShieldCheck, TrendingDown, TriangleAlert, Wallet } from 'lucide-react';
+import { Activity, ArrowRightLeft, Boxes, CalendarClock, Compass, Layers, PackageMinus, PackagePlus, ShieldCheck, ShoppingCart, Tags, TrendingDown, TriangleAlert, Wallet, Warehouse } from 'lucide-react';
 import { useStore, C } from '../store.jsx';
-import { Chip, Gauge, Kpi, Panel, Empty } from '../components/ui.jsx';
+import { Btn, Chip, Gauge, Kpi, Panel, Empty } from '../components/ui.jsx';
 import { money, num, pct, fecha, TONO_MOV } from '../format.js';
 
-const DESTINO_ALERTA = { stock: 'reabastecimiento', invima: 'productos', vencimiento: 'lotes', faltantes: 'ajustes', conteo: 'conteos', frio: 'frio', reorden: 'reabastecimiento', orden: 'ordenes', requisicion: 'requisiciones' };
+const DESTINO_ALERTA = { stock: 'reabastecimiento', invima: 'productos', vencimiento: 'vencimientos', faltantes: 'ajustes', conteo: 'conteos', frio: 'frio', reorden: 'reabastecimiento', orden: 'ordenes', requisicion: 'requisiciones' };
 
 export default function Dashboard() {
-  const { db, state, hoy, go } = useStore();
+  const { db, state, hoy, go, puede } = useStore();
+  const acciones = [
+    ['Nueva entrada', PackagePlus, 'entradas', 'entradas'],
+    ['Orden de compra', ShoppingCart, 'ordenes', 'ordenes'],
+    ['Nueva salida', PackageMinus, 'salidas', 'salidas'],
+    ['Traslado', ArrowRightLeft, 'traslados', 'traslados'],
+    ['Nuevo producto', Boxes, 'productos', 'maestros'],
+    ['Nuevo lote', Tags, 'lotes', 'maestros'],
+    ['Nueva bodega', Warehouse, 'bodegas', 'config']
+  ].filter((a) => puede(a[3]));
   const year = C.yearOf(hoy);
   const valor = C.valorInventario(state);
   const ls = C.lotes(db, state, hoy);
@@ -19,10 +28,10 @@ export default function Dashboard() {
   const cump = C.cumplimiento(db, state, hoy);
   const uc = C.ultimoCierre(db);
 
-  const porCat = Object.keys(C.CATEGORIAS).map((k) => ({
-    k, label: C.CATEGORIAS[k],
-    valor: db.productos.filter((p) => p.categoria === k).reduce((s, p) => s + (state.prods[p.id]?.value || 0), 0)
-  }));
+  const porCat = [...db.grupos.map((g) => ({ k: g.id, label: g.nombre })), { k: '', label: 'Sin grupo' }].map((g) => ({
+    k: g.k || 'sin', label: g.label,
+    valor: db.productos.filter((p) => (g.k ? p.grupoId === g.k : !db.grupos.some((x) => x.id === p.grupoId))).reduce((s, p) => s + (state.prods[p.id]?.value || 0), 0)
+  })).filter((g) => g.valor > 0).sort((a, b) => b.valor - a.valor);
   const maxCat = Math.max(1, ...porCat.map((x) => x.valor));
   const ultimos = C.ordenar(db.movimientos).reverse().slice(0, 7);
 
@@ -40,10 +49,17 @@ export default function Dashboard() {
         </div>
       </Panel>
 
+      {acciones.length > 0 && (
+        <div className="quick">
+          {acciones.map(([t, Icon, ruta]) => <Btn key={t} icon={Icon} onClick={() => go(ruta, 'nuevo')}>{t}</Btn>)}
+          <Btn variant="ghost" icon={Compass} onClick={() => go('guia')}>Guía de uso</Btn>
+        </div>
+      )}
+
       <div className="grid g-kpi">
         <Kpi label="Valor del inventario" value={money(valor)} sub={activos.length + ' referencias activas'} icon={Wallet} tone="cyan" onClick={() => go('kardex')} />
-        <Kpi label="Lotes por vencer" value={porVencer} sub={'Rojo ≤ ' + db.config.semaforo.rojo + ' d · amarillo ≤ ' + db.config.semaforo.amarillo + ' d'} icon={CalendarClock} tone="amber" onClick={() => go('lotes')} />
-        <Kpi label="Lotes vencidos" value={vencidos} sub="Con existencia: requieren baja" icon={TriangleAlert} tone={vencidos ? 'magenta' : 'green'} onClick={() => go('lotes')} />
+        <Kpi label="Lotes por vencer" value={porVencer} sub={'Rojo ≤ ' + db.config.semaforo.rojo + ' d · amarillo ≤ ' + db.config.semaforo.amarillo + ' d'} icon={CalendarClock} tone="amber" onClick={() => go('vencimientos')} />
+        <Kpi label="Lotes vencidos" value={vencidos} sub="Con existencia: requieren baja" icon={TriangleAlert} tone={vencidos ? 'magenta' : 'green'} onClick={() => go('vencimientos')} />
         <Kpi label="Bajo stock mínimo" value={bajo} sub="Referencias por reponer" icon={Boxes} tone={bajo ? 'red' : 'green'} onClick={() => go('productos')} />
         <Kpi label={'Faltantes ' + year} value={pct(f.pct, 2)} sub={'Límite fiscal ' + db.config.limiteFaltantes + ' % (ET art. 64)'} icon={TrendingDown} tone={f.pct > db.config.limiteFaltantes ? 'magenta' : 'violet'} onClick={() => go('ajustes')} />
       </div>
@@ -80,7 +96,7 @@ export default function Dashboard() {
       </div>
 
       <div className="grid g-2b">
-        <Panel title="Valor por categoría" icon={Layers}>
+        <Panel title="Valor por grupo" icon={Layers}>
           <div className="bars">
             {porCat.map((c) => (
               <div className="bar-row" key={c.k}>

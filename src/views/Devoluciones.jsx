@@ -74,9 +74,9 @@ function NuevaDevolucion({ onClose }) {
   );
 }
 
-export default function Devoluciones() {
+export default function Devoluciones({ arg }) {
   const { puede } = useStore();
-  const [nueva, setNueva] = useState(false);
+  const [nueva, setNueva] = useState(arg === 'nuevo');
   return (
     <Panel title="Devoluciones a proveedor" icon={Undo2} sub="Salida de lotes hacia el proveedor por defecto, vencimiento, error de pedido o retiro de mercado."
       actions={puede('devoluciones') && <Btn variant="primary" icon={Plus} onClick={() => setNueva(true)}>Nueva devolución</Btn>}>

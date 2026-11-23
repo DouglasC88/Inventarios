@@ -83,9 +83,10 @@ export default function Importar() {
     }
     const numero = mov ? C.verNumero(db, 'inicial') : '';
     commit((d) => {
-      d.config.ubicaciones = proy.config.ubicaciones;
       d.productos = proy.productos;
-      if (mov) d.movimientos.push(Object.assign({}, mov, { num: C.siguienteNumero(d, 'inicial'), orden: C.siguienteOrden(d) }));
+      d.bodegas = d.bodegas.concat(bodegasFaltantes.map((nombre, i) => ({ id: C.nuevoId() + i, codigo: 'B' + (d.bodegas.length + i + 1), nombre, tipo: 'bodega', responsable: '', sede: '', activa: true })));
+      C.sincronizarBodegas(d);
+      if (mov) { const nm = Object.assign({}, mov, { num: C.siguienteNumero(d, 'inicial'), orden: C.siguienteOrden(d) }); d.movimientos.push(nm); C.asegurarLotes(d, nm); }
     }, 'Importación', nombre + ' · ' + res.productos.length + ' productos' + (mov ? ' · ' + numero : ''));
     toast('Importación aplicada' + (mov ? ': ' + numero : ''));
     setRes(null);
