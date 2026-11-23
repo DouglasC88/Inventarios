@@ -60,6 +60,8 @@ País, departamento o estado y ciudad se eligen con buscador (se escribe y filtr
 - **Colombia:** 33 departamentos y 1.121 municipios de la DIVIPOLA del DANE, con su código (lo piden la factura electrónica y los RIPS). Fuente: paquete npm `divipola` (MIT).
 - **Resto del mundo:** 247 países (nombres en español) con sus estados y ciudades de [GeoNames](https://www.geonames.org), licencia [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), tomados del paquete npm `cities.json`.
 
+La carga masiva de terceros asigna el código DANE del municipio a partir del departamento y la ciudad (o de la columna Código DANE); para eso el motor incluye la lista de municipios en `src/core/divipola.js`.
+
 Los archivos están en `public/geo/` (uno por país, se descargan solo al elegir el país). Para regenerarlos: `node scripts/geo.mjs <divipola/index.js> <cities.json/admin1.json> <cities.json/cities.json>`.
 
 ## Arquitectura

@@ -580,3 +580,24 @@ test('ubicación del tercero: códigos DANE y países', () => {
   assert.ok(C.validarTercero(db, Object.assign({}, t, { pais: 'Venezuela', paisCodigo: 'VE', ciudad: '', ciudadCodigo: '' })).some((x) => /ciudad/.test(x)));
   assert.equal(C.normalizarTercero({ nombre: 'Y', departamento: 'antioquia' }).departamentoCodigo, '05');
 });
+
+test('código DANE del municipio por nombre, abreviatura o código', () => {
+  assert.equal(C.ubicarColombia('', 'Bogota').ciudadCodigo, '11001');
+  assert.equal(C.ubicarColombia('Norte de Santander', 'Cúcuta').ciudadCodigo, '54001');
+  assert.equal(C.ubicarColombia('', 'cartagena').ciudad, 'Cartagena de Indias');
+  assert.equal(C.ubicarColombia('ANTIOQUIA', 'MEDELLIN').ciudadCodigo, '05001');
+  assert.equal(C.ubicarColombia('', '', '5266').ciudad, 'Envigado');
+  assert.ok(/varios departamentos/.test(C.ubicarColombia('', 'Providencia').aviso));
+  assert.equal(C.ubicarColombia('Nariño', 'Providencia').ciudadCodigo, '52565');
+  assert.ok(/no se encontró/.test(C.ubicarColombia('Antioquia', 'Cali').aviso));
+  assert.equal(C.ubicarColombia('Valle', 'Cali').departamento, 'Valle del Cauca');
+  assert.equal(C.paisIso('venezuela'), 'VE');
+  const db = C.dbVacia();
+  const r = C.interpretarTerceros([
+    ['NIT', 'Razón social', 'País', 'Departamento', 'Ciudad'],
+    ['900123456', 'A', '', '', 'Bogotá'], ['800197268', 'B', 'Colombia', 'Nariño', 'Tumaco'], ['830987654', 'C', '', '', 'Providencia'], ['901456789', 'D', 'Venezuela', 'Zulia', 'Maracaibo']
+  ], db);
+  assert.deepEqual(r.terceros.map((t) => t.ciudadCodigo), ['11001', '52835', '', '']);
+  assert.equal(r.terceros[3].paisCodigo, 'VE');
+  assert.equal(r.avisos.length, 1);
+});

@@ -13,6 +13,7 @@
  *  - Existencias por bodega y lote; el costo es único por producto.
  */
 import { PAISES } from './paises.js';
+import { MUNICIPIOS } from './divipola.js';
 
 const EPS = 1e-9;
 const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
@@ -560,7 +561,8 @@ function interpretarTerceros(filas, db) {
     tipos: col(['tipo', 'tipo tercero', 'tipo de tercero', 'clase']), direccion: col(['direccion', 'dirección']), ciudad: col(['ciudad', 'municipio']),
     telefono: col(['telefono', 'teléfono']), celular: col(['celular', 'movil', 'móvil']), correo: col(['correo', 'email', 'e-mail', 'correo electronico', 'correo electrónico']), contacto: col(['contacto']),
     primerNombre: col(['primer nombre']), segundoNombre: col(['segundo nombre']), primerApellido: col(['primer apellido']), segundoApellido: col(['segundo apellido']),
-    sexo: col(['sexo', 'genero', 'género']), pais: col(['pais', 'país']), departamento: col(['departamento']), regimen: col(['regimen', 'régimen']),
+    sexo: col(['sexo', 'genero', 'género']), pais: col(['pais', 'país']), departamento: col(['departamento', 'estado', 'provincia', 'estado o provincia']), regimen: col(['regimen', 'régimen']),
+    codigoDane: col(['codigo dane', 'código dane', 'dane', 'divipola', 'codigo municipio', 'código municipio', 'cod municipio', 'codigo ciudad', 'código ciudad']),
     actividad: col(['actividad', 'actividad economica', 'actividad económica', 'ciiu']), plazo: col(['plazo', 'plazo de pago', 'plazos de pago', 'dias de pago', 'días de pago']),
     medioPago: col(['medio de pago', 'forma de pago']), banco: col(['banco']), tipoCuenta: col(['tipo de cuenta', 'tipo cuenta']), numeroCuenta: col(['numero de cuenta', 'número de cuenta', 'no cuenta', 'no. cuenta', 'cuenta bancaria']),
     retefuente: col(['retencion', 'retención', 'porcentaje de retencion', 'porcentaje de retención', 'retefuente']), reteica: col(['reteica', 'porcentaje reteica'])
@@ -571,6 +573,7 @@ function interpretarTerceros(filas, db) {
   if (errores.length) return { errores, terceros: [] };
   const v = (f, k) => (idx[k] < 0 ? '' : String(f[idx[k]] === undefined || f[idx[k]] === null ? '' : f[idx[k]]).trim());
   const terceros = [];
+  const avisos = [];
   const vistos = new Set();
   filas.slice(1).forEach((f, i) => {
     const fila = i + 2;
@@ -601,10 +604,22 @@ function interpretarTerceros(filas, db) {
     const tc = norm(v(f, 'tipoCuenta'));
     const pct = (k) => { const x = v(f, k).replace('%', '').replace(',', '.'); return x === '' ? '' : Number(x); };
     const banco = v(f, 'banco');
-    const dep = v(f, 'departamento');
+    // Ubicación: en Colombia se asigna el código DANE del departamento y del municipio (DIVIPOLA).
+    const paisTxt = v(f, 'pais');
+    const paisCodigo = paisTxt ? paisIso(paisTxt) : (existente && (existente.paisCodigo || paisIso(existente.pais))) || 'CO';
+    if (paisTxt && !paisCodigo) avisos.push('Fila ' + fila + ': el país "' + paisTxt + '" no se reconoce.');
+    let lugar = { departamento: v(f, 'departamento'), ciudad: v(f, 'ciudad') };
+    if (paisCodigo === 'CO' && (lugar.departamento || lugar.ciudad || v(f, 'codigoDane'))) {
+      const u = ubicarColombia(lugar.departamento, lugar.ciudad, v(f, 'codigoDane'));
+      if (u.aviso) avisos.push('Fila ' + fila + ' (' + nit + '): ' + u.aviso + '. Se carga sin código DANE.');
+      lugar = Object.assign({ departamentoCodigo: '', ciudadCodigo: '' }, lugar, u); delete lugar.aviso;
+    }
+    const dep = lugar.departamento;
     const t = {
       fila, existente: !!existente, id: existente ? existente.id : null, tipoDoc, nit, dv, nombre, persona, tipos: tipos.length ? tipos : existente ? existente.tipos || ['proveedor'] : ['proveedor'],
-      direccion: v(f, 'direccion'), ciudad: v(f, 'ciudad'), departamento: DEPARTAMENTOS.find((d) => norm(d) === norm(dep)) || dep, pais: v(f, 'pais') || (existente ? '' : 'Colombia'),
+      direccion: v(f, 'direccion'), ciudad: lugar.ciudad, departamento: DEPARTAMENTOS.find((d) => norm(d) === norm(dep)) || dep,
+      departamentoCodigo: lugar.departamentoCodigo || '', ciudadCodigo: lugar.ciudadCodigo || '',
+      pais: paisCodigo ? (PAISES.find((x) => x[0] === paisCodigo) || [])[1] : paisTxt || (existente ? '' : 'Colombia'), paisCodigo: paisCodigo || '', extranjero: paisCodigo && paisCodigo !== 'CO' ? true : '',
       telefono: v(f, 'telefono'), celular: v(f, 'celular'), correo: v(f, 'correo'), contacto: v(f, 'contacto'),
       sexo: persona === 'natural' && SEXOS[sx] ? sx : '', regimen, responsableIva: regimen ? !['noResponsable', 'noContribuyente'].includes(regimen) : '', obligadoFacturar: existente ? '' : tipoDoc === 'NIT',
       actividad: v(f, 'actividad'), plazoPago: plazo, medioPago: Object.keys(MEDIOS_PAGO).find((k) => mp && (mp.includes(k) || mp.includes(norm(MEDIOS_PAGO[k])))) || '',
@@ -615,7 +630,7 @@ function interpretarTerceros(filas, db) {
     if (t.retefuentePct !== '' && !(t.retefuentePct >= 0 && t.retefuentePct <= 100)) errores.push('Fila ' + fila + ': el porcentaje de retención no es válido.');
     terceros.push(t);
   });
-  return { errores, terceros };
+  return { errores, avisos, terceros };
 }
 
 // ---------- Terceros ----------
@@ -645,6 +660,52 @@ const DEPARTAMENTOS_CO = {
   '88': 'San Andrés y Providencia', '91': 'Amazonas', '94': 'Guainía', '95': 'Guaviare', '97': 'Vaupés', '99': 'Vichada'
 };
 const DEPARTAMENTOS = Object.values(DEPARTAMENTOS_CO).sort((a, b) => a.localeCompare(b, 'es'));
+const normLugar = (x) => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/d\.\s*c\.?/g, 'dc').replace(/[.,;()]/g, ' ').replace(/\s+/g, ' ').trim();
+const ALIAS_DEPTO = { bogota: '11', 'bogota dc': '11', 'distrito capital': '11', 'santa fe de bogota': '11', valle: '76', guajira: '44', 'norte santander': '54', 'san andres': '88', 'archipielago de san andres providencia y santa catalina': '88', 'san andres providencia y santa catalina': '88' };
+/** Código DANE del departamento a partir de su nombre o su código. */
+function departamentoDane(txt) {
+  const t = normLugar(txt);
+  if (!t) return '';
+  if (/^\d{1,2}$/.test(t)) { const c = t.padStart(2, '0'); return DEPARTAMENTOS_CO[c] ? c : ''; }
+  return Object.keys(DEPARTAMENTOS_CO).find((c) => normLugar(DEPARTAMENTOS_CO[c]) === t) || ALIAS_DEPTO[t] || '';
+}
+/**
+ * Ubica un municipio de Colombia (DIVIPOLA) por su código DANE o por su nombre, aunque venga sin tildes
+ * o abreviado ("Cúcuta" → San José de Cúcuta). Devuelve los nombres oficiales y los códigos, o un aviso.
+ */
+function ubicarColombia(departamento, ciudad, codigo) {
+  const cod = String(codigo || '').replace(/\D/g, '');
+  if (cod) {
+    const m = MUNICIPIOS.find((x) => x[0] === cod.padStart(5, '0'));
+    if (!m) return { aviso: 'el código DANE ' + codigo + ' no existe' };
+    return { departamentoCodigo: m[0].slice(0, 2), departamento: DEPARTAMENTOS_CO[m[0].slice(0, 2)], ciudadCodigo: m[0], ciudad: m[1] };
+  }
+  const dep = departamentoDane(departamento);
+  if (departamento && !dep) return { aviso: 'el departamento "' + departamento + '" no existe en Colombia' };
+  const base = dep ? { departamentoCodigo: dep, departamento: DEPARTAMENTOS_CO[dep] } : {};
+  const q = normLugar(ciudad);
+  if (!q) return base;
+  const cand = MUNICIPIOS.filter((x) => !dep || x[0].slice(0, 2) === dep);
+  let hall = cand.filter((x) => normLugar(x[1]) === q);
+  if (!hall.length) {
+    hall = cand.filter((x) => { const n = normLugar(x[1]); return n.startsWith(q + ' ') || n.endsWith(' ' + q); });
+    // Nombre abreviado con varias opciones: si una es capital de departamento (código terminado en 001), es esa ("Cartagena").
+    const capitales = hall.filter((x) => x[0].endsWith('001'));
+    if (hall.length > 1 && capitales.length === 1) hall = capitales;
+  }
+  if (!hall.length && !dep && ALIAS_DEPTO[q]) hall = MUNICIPIOS.filter((x) => x[0] === ALIAS_DEPTO[q] + '001');
+  if (hall.length === 1) return { departamentoCodigo: hall[0][0].slice(0, 2), departamento: DEPARTAMENTOS_CO[hall[0][0].slice(0, 2)], ciudadCodigo: hall[0][0], ciudad: hall[0][1] };
+  if (hall.length > 1) return Object.assign(base, { aviso: '"' + ciudad + '" existe en varios departamentos (' + [...new Set(hall.map((x) => DEPARTAMENTOS_CO[x[0].slice(0, 2)]))].join(', ') + '); indique el departamento' });
+  return Object.assign(base, { aviso: 'no se encontró el municipio "' + ciudad + '"' + (dep ? ' en ' + DEPARTAMENTOS_CO[dep] : '') });
+}
+/** Código ISO del país a partir de su nombre (en español) o su código. */
+function paisIso(txt) {
+  const t = normLugar(txt);
+  if (!t) return '';
+  const up = String(txt).trim().toUpperCase();
+  return (PAISES.find(([c, n]) => c === up || normLugar(n) === t) || [])[0] || '';
+}
+
 /** ¿La ubicación del tercero es en Colombia? */
 function enColombia(t) { return t.paisCodigo ? t.paisCodigo === 'CO' : !t.pais || /^colombia$/i.test(String(t.pais).trim()); }
 
@@ -1992,7 +2053,7 @@ export {
   balanceComprobacion, estadoCosto, COLUMNAS_INTERFAZ, archivoInterfaz, interpretarPlanCuentas, interpretarTerceros,
   NIVELES_GRUPO, TIPOS_MATERIAL, nivelGrupo, rutaGrupo, gruposDescendientes, arbolGrupos, lineasMovimiento,
   UNIDADES, TARIFAS_IVA, pctIva, FORMAS_FARMACEUTICAS, VIAS_ADMIN, ESTERILIZACION, POLITICAS_REPOSICION, gtinValido, validarProducto, precioPactado, validarOrdenCompra,
-  TIPOS_DOC, TIPOS_TERCERO, SEXOS, REGIMENES, RESPONSABILIDADES, MEDIOS_PAGO, PLAZOS_PAGO, TIPOS_CUENTA_BANCO, TIPOS_TRABAJADOR, SUBTIPOS_TRABAJADOR, TIPOS_CONTRATO, PERIODICIDADES, DEPARTAMENTOS, DEPARTAMENTOS_CO, PAISES, enColombia, nombreTercero, partirNombre, validarTercero, impuestosSugeridos, calcularDV, documentoTercero, normalizarTercero,
+  TIPOS_DOC, TIPOS_TERCERO, SEXOS, REGIMENES, RESPONSABILIDADES, MEDIOS_PAGO, PLAZOS_PAGO, TIPOS_CUENTA_BANCO, TIPOS_TRABAJADOR, SUBTIPOS_TRABAJADOR, TIPOS_CONTRATO, PERIODICIDADES, DEPARTAMENTOS, DEPARTAMENTOS_CO, PAISES, MUNICIPIOS, enColombia, ubicarColombia, departamentoDane, paisIso, nombreTercero, partirNombre, validarTercero, impuestosSugeridos, calcularDV, documentoTercero, normalizarTercero,
   TIPOS_BODEGA, sincronizarBodegas, renombrarBodega, bodegaEnUso,
   ESTADOS_LOTE, claveLote, buscarLote, asegurarLotes,
   r2, daysBetween, addDays, todayISO, yearOf, isISODate,

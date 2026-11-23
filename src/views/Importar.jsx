@@ -157,9 +157,9 @@ function ImportarProductos() {
 }
 
 const PLANTILLA_TERCEROS = [
-  ['Tipo documento', 'NIT', 'DV', 'Razón social', 'Primer nombre', 'Segundo nombre', 'Primer apellido', 'Segundo apellido', 'Sexo', 'Tipo', 'Régimen', 'Actividad económica', 'País', 'Departamento', 'Ciudad', 'Dirección', 'Teléfono', 'Celular', 'Correo', 'Contacto', 'Plazo de pago', 'Medio de pago', 'Banco', 'Tipo de cuenta', 'Número de cuenta', 'Retención', 'ReteICA'],
-  ['NIT', '900123456', '8', 'Proveedor de ejemplo S.A.S.', '', '', '', '', '', 'Proveedor', 'Responsable de IVA', '4645', 'Colombia', 'Bogotá D.C.', 'Bogotá D.C.', 'Cra. 1 # 2-3', '6015550000', '3005550000', 'facturas@ejemplo.co', 'Ana Gómez', '30', 'Transferencia', 'Banco de ejemplo', 'Corriente', '0001234567', '2.5', '0.966'],
-  ['CC', '1020304050', '', '', 'María', 'Fernanda', 'López', 'Gil', 'F', 'Paciente', 'No responsable de IVA', '', 'Colombia', 'Antioquia', 'Medellín', '', '', '3000000000', '', '', '', '', '', '', '', '', '']
+  ['Tipo documento', 'NIT', 'DV', 'Razón social', 'Primer nombre', 'Segundo nombre', 'Primer apellido', 'Segundo apellido', 'Sexo', 'Tipo', 'Régimen', 'Actividad económica', 'País', 'Departamento', 'Ciudad', 'Código DANE', 'Dirección', 'Teléfono', 'Celular', 'Correo', 'Contacto', 'Plazo de pago', 'Medio de pago', 'Banco', 'Tipo de cuenta', 'Número de cuenta', 'Retención', 'ReteICA'],
+  ['NIT', '900123456', '8', 'Proveedor de ejemplo S.A.S.', '', '', '', '', '', 'Proveedor', 'Responsable de IVA', '4645', 'Colombia', 'Bogotá D.C.', 'Bogotá D.C.', '11001', 'Cra. 1 # 2-3', '6015550000', '3005550000', 'facturas@ejemplo.co', 'Ana Gómez', '30', 'Transferencia', 'Banco de ejemplo', 'Corriente', '0001234567', '2.5', '0.966'],
+  ['CC', '1020304050', '', '', 'María', 'Fernanda', 'López', 'Gil', 'F', 'Paciente', 'No responsable de IVA', '', 'Colombia', 'Antioquia', 'Medellín', '', '', '', '3000000000', '', '', '', '', '', '', '', '', '']
 ];
 const PLANTILLA_PLAN = [
   ['Código', 'Nombre', 'Naturaleza', 'Tercero'],
@@ -204,15 +204,22 @@ function CargaTerceros() {
   return (
     <div className="stack">
       <CargaArchivo titulo="Terceros desde Excel" nombrePlantilla="plantilla-terceros.csv" plantilla={PLANTILLA_TERCEROS}
-        texto="Proveedores, clientes, pacientes, empleados y laboratorios: documento, razón social o nombres y apellidos, tipo, régimen, ubicación, contacto, plazo y medio de pago, cuenta bancaria y retenciones. Solo son obligatorios el documento y el nombre; el dígito de verificación se calcula y se valida."
+        texto="Proveedores, clientes, pacientes, empleados y laboratorios: documento, razón social o nombres y apellidos, tipo, régimen, ubicación, contacto, plazo y medio de pago, cuenta bancaria y retenciones. Solo son obligatorios el documento y el nombre; el dígito de verificación se calcula y se valida. En Colombia el código DANE del municipio se asigna solo a partir del departamento y la ciudad (o use la columna Código DANE)."
         onFilas={(f, n) => { setNombre(n); setRes(C.interpretarTerceros(f, db)); }} />
       {res && (
         <Panel title={'Vista previa: ' + nombre} icon={Contact}>
           <Errores lista={res.errores} />
-          <div className="kv"><div><span>Nuevos</span><b>{nuevos}</b></div><div><span>Se actualizan</span><b>{res.terceros.length - nuevos}</b></div></div>
+          {res.avisos && res.avisos.length > 0 && (
+            <div style={{ marginBottom: 12 }}><Nota>
+              <b>{res.avisos.length} aviso(s) de ubicación</b> (estos terceros se cargan, pero sin código DANE; puede corregir el archivo o elegir el municipio después en la ficha):
+              <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>{res.avisos.slice(0, 15).map((a, i) => <li key={i}>{a}</li>)}</ul>
+              {res.avisos.length > 15 && <div>… y {res.avisos.length - 15} más.</div>}
+            </Nota></div>
+          )}
+          <div className="kv"><div><span>Nuevos</span><b>{nuevos}</b></div><div><span>Se actualizan</span><b>{res.terceros.length - nuevos}</b></div><div><span>Con código DANE</span><b>{res.terceros.filter((t) => t.ciudadCodigo).length}</b></div></div>
           <div className="tbl-wrap" style={{ maxHeight: 380 }}><table className="tbl">
-            <thead><tr><th>Fila</th><th>Documento</th><th>Nombre</th><th>Tipo</th><th>Ciudad</th><th>Estado</th></tr></thead>
-            <tbody>{res.terceros.map((t) => <tr key={t.fila}><td>{t.fila}</td><td className="mono">{C.documentoTercero(t)}</td><td>{t.nombre}</td><td>{t.tipos.map((x) => C.TIPOS_TERCERO[x]).join(', ')}</td><td>{t.ciudad}</td><td>{t.existente ? <Chip tone="amber">Actualiza</Chip> : <Chip tone="green">Nuevo</Chip>}</td></tr>)}</tbody>
+            <thead><tr><th>Fila</th><th>Documento</th><th>Nombre</th><th>Tipo</th><th>Ubicación</th><th>Código DANE</th><th>Estado</th></tr></thead>
+            <tbody>{res.terceros.map((t) => <tr key={t.fila}><td>{t.fila}</td><td className="mono">{C.documentoTercero(t)}</td><td>{t.nombre}</td><td>{t.tipos.map((x) => C.TIPOS_TERCERO[x]).join(', ')}</td><td>{t.ciudad}<div className="small muted">{[t.departamento, t.paisCodigo && t.paisCodigo !== 'CO' ? t.pais : ''].filter(Boolean).join(' · ')}</div></td><td className="mono">{t.ciudadCodigo || (t.paisCodigo === 'CO' && t.ciudad ? <Chip tone="amber">Sin código</Chip> : '—')}</td><td>{t.existente ? <Chip tone="amber">Actualiza</Chip> : <Chip tone="green">Nuevo</Chip>}</td></tr>)}</tbody>
           </table></div>
           <div className="toolbar" style={{ marginTop: 12, justifyContent: 'flex-end' }}><Btn onClick={() => setRes(null)}>Descartar</Btn><Btn variant="primary" icon={Upload} onClick={aplicar} disabled={!res.terceros.length}>Cargar {res.terceros.length} terceros</Btn></div>
         </Panel>

@@ -56,6 +56,7 @@ const ARTICULOS = [
     'Menú Terceros › "Cargar desde Excel" (o Productos y servicios › Carga desde Excel › Terceros) › "Plantilla".',
     'Una fila por tercero: tipo de documento, número (sin dígito de verificación), razón social, tipo (proveedor, cliente, paciente, empleado), ciudad, correo y teléfono.',
     'Suba el archivo: el sistema calcula el DV, marca los que ya existen (se actualizan) y los que tienen errores.',
+    'En Colombia asigna solo el código DANE del municipio a partir del departamento y la ciudad, aunque vengan sin tildes o abreviados ("Cúcuta", "Bogota"). También puede traer la columna Código DANE. Si un municipio no se reconoce o existe en varios departamentos, se avisa y el tercero se carga sin código.',
     'Pulse "Cargar terceros".'
   ]],
   ['compras', 'Cómo hacer una orden de compra', ['ordenes', 'nuevo'], [

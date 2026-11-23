@@ -36,6 +36,9 @@ const co = {
   ciudades: munis.map(([cod, n]) => [nombreMuni(cod, n), cod.slice(0, 2), cod]).sort((a, b) => a[0].localeCompare(b[0], 'es'))
 };
 fs.writeFileSync(path.join(salida, 'CO.json'), JSON.stringify(co));
+// El motor también los necesita (carga masiva de terceros): código DANE y nombre.
+fs.writeFileSync(path.resolve('src/core/divipola.js'),
+  '// Generado por scripts/geo.mjs. Municipios de Colombia (DIVIPOLA del DANE): [código, nombre]. Los 2 primeros dígitos son el departamento.\nexport const MUNICIPIOS = ' + JSON.stringify(co.ciudades.map((c) => [c[2], c[0]])) + ';\n');
 
 // --- Resto del mundo (GeoNames)
 const admin1 = JSON.parse(fs.readFileSync(a1Path, 'utf8'));
