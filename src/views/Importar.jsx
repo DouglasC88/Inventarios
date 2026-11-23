@@ -20,7 +20,7 @@ async function leerArchivo(file) {
 }
 
 export default function Importar() {
-  const { db, hoy, commit, toast, nombreUsuario } = useStore();
+  const { db, hoy, commit, toast, nombreUsuario, go } = useStore();
   const archivo = useRef(null);
   const [nombre, setNombre] = useState('');
   const [res, setRes] = useState(null);
@@ -99,7 +99,7 @@ export default function Importar() {
   return (
     <div className="stack">
       <Panel title="Importar desde Excel o CSV" icon={FileSpreadsheet}
-        sub="Migre su maestro de productos y el saldo inicial por lote desde otro sistema (A2, SAP, Excel)."
+        sub="Cree productos y su existencia inicial por lote desde un Excel (migración desde A2, SAP u otro sistema). Para productos que ya tienen movimientos, cargue el conteo en Inventario físico."
         actions={<><Btn icon={Download} onClick={() => descargar('plantilla-nova-inventario.csv', C.csv(PLANTILLA))}>Descargar plantilla</Btn><Btn variant="primary" icon={Upload} onClick={() => archivo.current && archivo.current.click()}>Elegir archivo</Btn></>}>
         <input ref={archivo} type="file" accept=".xlsx,.csv,.txt,text/csv" hidden onChange={cargar} />
         <Nota>
@@ -107,6 +107,18 @@ export default function Importar() {
           Los nombres pueden variar (por ejemplo "Descripción" o "Existencia"). Si un código ya existe, se actualiza la ficha.
         </Nota>
       </Panel>
+      <div className="law">
+        <Panel>
+          <h3>1 · Productos nuevos con su existencia</h3>
+          <p>Para empezar a usar NOVA o agregar productos en bloque: código, nombre, clasificación, lote, vencimiento, cantidad y costo. Crea las fichas, los lotes y el saldo inicial.</p>
+          <div className="toolbar"><Btn icon={Download} onClick={() => descargar('plantilla-nova-inventario.csv', C.csv(PLANTILLA))}>Plantilla</Btn><Btn variant="primary" icon={Upload} onClick={() => archivo.current && archivo.current.click()}>Subir archivo</Btn></div>
+        </Panel>
+        <Panel>
+          <h3>2 · Inventario físico (conteo) desde Excel</h3>
+          <p>Descargue sus existencias actuales por bodega y lote, cuente, escriba lo contado y súbalo: el sistema compara, muestra las diferencias y genera el ajuste al aplicar.</p>
+          <div className="toolbar"><Btn variant="primary" icon={Upload} onClick={() => go('conteos', 'excel')}>Ir a inventario físico</Btn></div>
+        </Panel>
+      </div>
       {res ? (
         <Panel title={'Vista previa: ' + nombre} icon={FileSpreadsheet}>
           <Errores lista={[...res.errores, ...err]} />

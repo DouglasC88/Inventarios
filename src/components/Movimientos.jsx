@@ -76,8 +76,8 @@ export function SelectLote({ value, onChange, keyFn, filtro, todos, bodega, extr
 
 export function SelectKit({ value, onChange }) {
   const { db } = useStore();
-  const options = db.kits.map((k) => ({ value: k.id, label: k.codigo + ' · ' + k.nombre, sub: k.lineas.length + ' insumos' }));
-  return <Combo value={value} onChange={onChange} options={options} placeholder="Escriba el procedimiento o kit…" />;
+  const options = db.servicios.filter((k) => k.activo !== false).map((k) => ({ value: k.id, label: k.codigo + ' · ' + k.nombre, sub: [k.categoria, k.cups ? 'CUPS ' + k.cups : '', k.lineas.length + ' insumos'].filter(Boolean).join(' · ') }));
+  return <Combo value={value} onChange={onChange} options={options} placeholder="Escriba el servicio o procedimiento…" />;
 }
 
 export function encabezadoMov(db, mov, costos) {

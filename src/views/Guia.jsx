@@ -1,93 +1,167 @@
-import { CircleCheck, Circle, Compass, ArrowRight } from 'lucide-react';
+import { useState } from 'react';
+import { ArrowRight, Circle, CircleCheck, Compass, LifeBuoy } from 'lucide-react';
 import { useStore } from '../store.jsx';
-import { Btn, Panel } from '../components/ui.jsx';
+import { Btn, Panel, SearchBox, Tabs } from '../components/ui.jsx';
 
-const PROCESOS = [
-  {
-    t: 'Cómo hacer una orden de compra', ruta: ['ordenes', 'nuevo'], boton: 'Nueva orden de compra',
-    pasos: [
-      'Menú Compras › Órdenes de compra › "Nueva orden".',
-      'Elija el proveedor, la fecha de entrega prevista y la bodega donde se recibirá.',
-      'Agregue cada producto con la cantidad (en unidad de consumo) y el costo pactado.',
-      'Pulse "Crear orden". Puede imprimirla y enviarla al proveedor.',
-      'Atajo: en Reabastecimiento el sistema sugiere qué pedir y arma la orden por proveedor.'
-    ]
-  },
-  {
-    t: 'Cómo hacer una entrada de inventario (recibir mercancía)', ruta: ['entradas', 'nuevo'], boton: 'Nueva entrada',
-    pasos: [
-      'Menú Operación › Entradas › "Nueva entrada". Si hay orden de compra, ábrala y pulse "Recibir mercancía": se cargan los productos pendientes.',
-      'Paso 1, documento: bodega que recibe, proveedor, tipo de soporte (factura electrónica o documento soporte) y su número. Agregue fletes o seguros en "Costos adicionales".',
-      'Paso 2, productos: una línea por lote. Elija el producto, escriba el número de lote del empaque y la fecha de vencimiento (si el lote ya existe, la fecha se completa sola).',
-      'Escriba cantidad y costo unitario sin IVA descontable. Si compra por caja, elija la unidad de compra y el sistema convierte a unidades.',
-      'Pulse "Registrar entrada". El lote queda creado en el maestro de lotes y el kardex se actualiza.',
-      'Atajo: escanee el código GS1 / UDI del empaque y se llenan producto, lote y vencimiento.'
-    ]
-  },
-  {
-    t: 'Cómo crear un lote y registrar su vencimiento', ruta: ['lotes', 'nuevo'], boton: 'Nuevo lote',
-    pasos: [
-      'Normalmente el lote se crea solo al registrar la entrada (número de lote + fecha de vencimiento en la línea).',
-      'Para crearlo antes: Maestros › Lotes › "Nuevo lote". Indique producto, número de lote, fecha de fabricación y fecha de vencimiento.',
-      'Desde el maestro de lotes puede poner un lote en cuarentena o bloquearlo (por alerta sanitaria o excursión de temperatura) y liberarlo después.',
-      'El semáforo de vencimientos (Control › Vencimientos) avisa en rojo y amarillo según los días configurados.'
-    ]
-  },
-  {
-    t: 'Cómo crear bodegas y la clasificación', ruta: ['bodegas', 'nuevo'], boton: 'Nueva bodega',
-    pasos: [
-      'Maestros › Bodegas › "Nueva bodega": código, nombre, tipo (bodega, consultorio, nevera, cuarentena), responsable y sede. Marque cuál es la principal.',
-      'Maestros › Clasificación › "Nueva línea" (por ejemplo Operatoria) y, en cada línea, "+ Grupo" (Resinas) y "+ Subgrupo" (Resinas compuestas).',
-      'En la ficha de cada producto elija su grupo y su bodega habitual.'
-    ]
-  },
-  {
-    t: 'Cómo entregar insumos a un consultorio o paciente', ruta: ['salidas', 'nuevo'], boton: 'Nueva salida',
-    pasos: [
-      'Para surtir un consultorio: Traslados › "Nuevo traslado" de la bodega principal al consultorio (o atienda su requisición).',
-      'Para registrar el consumo: Salidas › "Nueva salida", bodega de donde sale, paciente (historia clínica) y procedimiento.',
-      'Use un kit por procedimiento para descontar todos los insumos de una vez. Los lotes se asignan solos por fecha de vencimiento.'
-    ]
-  }
+const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+// Portal de ayuda: artículos "cómo hacer", agrupados por sección del menú.
+const ARTICULOS = [
+  ['terceros', 'Cómo crear un tercero (proveedor, cliente o paciente)', ['terceros', 'nuevo'], [
+    'Menú Terceros › "Nuevo tercero".',
+    'Elija tipo de persona y tipo de documento. Para NIT escriba el número sin el dígito de verificación: el sistema lo calcula.',
+    'Escriba la razón social o el nombre, y marque si es proveedor, cliente, paciente o empleado.',
+    'Complete dirección, ciudad, correo de facturación, si es responsable de IVA y si factura electrónicamente.',
+    'También puede crearlo desde cualquier buscador de tercero: escriba el NIT y elija "Crear tercero".'
+  ]],
+  ['productos', 'Cómo crear un producto o insumo con sus lotes', ['productos', 'nuevo'], [
+    'Menú Productos y servicios › Productos › "Nuevo producto".',
+    'Identificación: código, nombre, clasificación (escriba la línea o grupo), tipo de material, marca, presentación y código de barras.',
+    'Almacenamiento: unidad, mínimo, máximo, bodega habitual y ubicación física. Marque si maneja lote y vencimiento.',
+    'Compras: unidad de compra (por ejemplo, caja x50), proveedor preferido y días de entrega.',
+    'Sanitaria: registro INVIMA, vencimiento del registro, clase de riesgo y cadena de frío.',
+    'Lotes y existencia inicial: "Agregar lote" con número, fabricación y vencimiento; si ya lo tiene en bodega, escriba la cantidad y el costo.'
+  ]],
+  ['productos', 'Cómo crear un servicio y los insumos que consume', ['kits', 'nuevo'], [
+    'Menú Productos y servicios › Servicios › "Nuevo servicio".',
+    'Escriba código, nombre, categoría, código CUPS, precio e IVA.',
+    'Agregue cada insumo y la cantidad que consume por servicio (se admiten fracciones, como 0,25 de jeringa).',
+    'El sistema muestra el costo de insumos y el margen frente al precio.',
+    'En Salidas elija el servicio y cuántas veces se hizo: se descuentan todos sus insumos por lote.'
+  ]],
+  ['productos', 'Cómo crear la clasificación (línea, grupo y subgrupo)', ['grupos', 'nuevo'], [
+    'Menú Productos y servicios › Clasificación › "Nueva línea" (por ejemplo, Operatoria).',
+    'En la fila de la línea pulse "+ Grupo" (Resinas y adhesivos) y en el grupo "+ Subgrupo" (Resinas compuestas).',
+    'Asigne a cada producto el nivel más específico. Los filtros y reportes por línea incluyen sus grupos y subgrupos.'
+  ]],
+  ['productos', 'Cómo crear un lote y registrar su vencimiento', ['lotes', 'nuevo'], [
+    'Desde la ficha del producto (sección Lotes y existencia inicial) o en Productos y servicios › Lotes › "Nuevo lote".',
+    'También se crea solo al registrar una entrada: número de lote y fecha de vencimiento en la línea.',
+    'Desde Lotes puede poner un lote en cuarentena o bloquearlo (alerta sanitaria, excursión de temperatura) y liberarlo después.'
+  ]],
+  ['productos', 'Cómo cargar productos y existencias desde Excel', ['importar', ''], [
+    'Menú Productos y servicios › Carga desde Excel › "Plantilla".',
+    'Llene una fila por lote: código, nombre, clasificación, unidad, lote, vencimiento, cantidad y costo.',
+    'Suba el archivo: verá la vista previa con errores por fila. Pulse "Aplicar importación".'
+  ]],
+  ['compras', 'Cómo hacer una orden de compra', ['ordenes', 'nuevo'], [
+    'Menú Compras y entradas › Órdenes de compra › "Nueva orden".',
+    'Escriba el NIT o nombre del proveedor, la fecha de entrega y la bodega que recibe.',
+    'Agregue productos con cantidad y costo pactado. Imprímala y envíela al proveedor.',
+    'Atajo: Compras y entradas › Reabastecimiento sugiere qué pedir y arma la orden por proveedor.'
+  ]],
+  ['compras', 'Cómo hacer una entrada de inventario', ['entradas', 'nuevo'], [
+    'Menú Compras y entradas › Entradas › "Nueva entrada" (o desde la orden: "Recibir mercancía").',
+    'Documento: bodega que recibe, proveedor, factura electrónica o documento soporte y su número; fletes en "Costos adicionales".',
+    'Productos: una línea por lote con número de lote, vencimiento, cantidad y costo sin IVA descontable.',
+    'Si compra por caja, elija la unidad de compra: el sistema convierte a unidades. Puede escanear el código GS1 / UDI.'
+  ]],
+  ['compras', 'Cómo devolver mercancía al proveedor', ['devoluciones', 'nuevo'], [
+    'Menú Compras y entradas › Devoluciones › "Nueva devolución".',
+    'Proveedor, bodega, causa y número de la nota crédito; elija los lotes (solo aparecen los recibidos de ese proveedor).'
+  ]],
+  ['salidas', 'Cómo registrar el consumo de un paciente o servicio', ['salidas', 'nuevo'], [
+    'Menú Salidas y movimientos › Salidas › "Nueva salida".',
+    'Bodega de donde sale, tipo de destino (paciente, consultorio, servicio o venta) e historia clínica.',
+    'Elija el servicio realizado y "Agregar insumos del servicio", o escriba los productos uno a uno.',
+    'Los lotes se asignan solos por fecha de vencimiento; los vencidos o en cuarentena nunca se entregan.'
+  ]],
+  ['salidas', 'Cómo surtir un consultorio (traslado o requisición)', ['traslados', 'nuevo'], [
+    'Traslado directo: Salidas y movimientos › Traslados › "Nuevo traslado", de la bodega principal al consultorio.',
+    'Con requisición: el consultorio crea la requisición; la bodega la abre y pulsa "Atender con traslado".'
+  ]],
+  ['salidas', 'Cómo registrar faltantes, sobrantes o bajas', ['ajustes', ''], [
+    'Menú Salidas y movimientos › Ajustes y bajas.',
+    'Ajuste: lote, causa (faltante, sobrante, corrección), cantidad, acta y quién autoriza.',
+    'Baja: vencidos, dañados, retiro de mercado o ruptura de cadena de frío, con acta y autorización.'
+  ]],
+  ['kardex', 'Cómo cargar el inventario físico desde Excel', ['conteos', 'excel'], [
+    'Menú Kardex e inventario › Inventario físico › "Cargar desde Excel".',
+    'Descargue la plantilla con sus existencias por bodega y lote; escriba la "Cantidad contada".',
+    'Suba el archivo: verá faltantes, sobrantes y lotes nuevos. Cree el conteo, escriba el acta y "Aplicar conteo".'
+  ]],
+  ['kardex', 'Cómo consultar existencias y kardex', ['existencias', ''], [
+    'Kardex e inventario › Existencias: tarjeta General y una por bodega; toque una para filtrar.',
+    'Busque por nombre, código o lote. Desde cada insumo abra su kardex o la trazabilidad del lote.'
+  ]],
+  ['kardex', 'Cómo cerrar el periodo', ['cierres', ''], [
+    'Kardex e inventario › Cierres › "Nuevo cierre". Revise el deterioro por valor neto realizable.',
+    'Al cerrar, nadie puede registrar ni anular movimientos con fecha igual o anterior.'
+  ]],
+  ['contabilidad', 'Cómo configurar las cuentas contables', ['ccuentas', ''], [
+    'Menú Contabilidad › Cuentas: revise la cuenta de cada concepto (inventario 1455, proveedores 2205, costo 6155…).',
+    'Opcional: asigne cuentas propias a una línea o grupo de la clasificación; los niveles inferiores las heredan.',
+    'Valide la parametrización con su contador.'
+  ]],
+  ['contabilidad', 'Cómo pasar el inventario a la contabilidad', ['comprobantes', ''], [
+    'Menú Contabilidad › Comprobantes: cada movimiento genera su comprobante automáticamente.',
+    'Filtre por fechas y pulse "Exportar al software contable": obtiene un archivo con fecha, cuenta, NIT, centro de costo, débito y crédito.',
+    'Contabilidad › Conciliación compara el saldo contable del inventario con el valor del kardex.'
+  ]],
+  ['reportes', 'Cómo sacar un reporte', ['reportes', ''], [
+    'Menú Reportes: elija uno de los 32 reportes.',
+    'Use los filtros (fechas, bodega, clasificación, producto, tercero), ordene con un clic en la columna.',
+    'Exporte a Excel o imprima / guarde en PDF.'
+  ]],
+  ['config', 'Cómo crear usuarios y bodegas', ['usuarios', ''], [
+    'Configuración › Usuarios: usuario, nombre, rol y PIN. El rol define qué puede hacer cada persona.',
+    'Configuración › Bodegas: código, nombre, tipo (bodega, consultorio, nevera, cuarentena), responsable y si es la principal.'
+  ]]
 ];
+const SECCIONES = [['todas', 'Todas'], ['terceros', 'Terceros'], ['productos', 'Productos y servicios'], ['compras', 'Compras y entradas'], ['salidas', 'Salidas'], ['kardex', 'Kardex e inventario'], ['contabilidad', 'Contabilidad'], ['reportes', 'Reportes'], ['config', 'Configuración']];
 
-export default function Guia() {
+export function PrimerosPasos() {
   const { db, go, puede } = useStore();
   const pasos = [
     ['Datos de la empresa y método de valoración', db.config.empresa.nombre && db.config.empresa.nombre !== 'Mi empresa', 'config', '', 'config'],
     ['Crear las bodegas (principal, consultorios, nevera)', db.bodegas.length > 1, 'bodegas', 'nuevo', 'config'],
     ['Crear la clasificación: líneas, grupos y subgrupos', db.grupos.length > 0, 'grupos', 'nuevo', 'maestros'],
     ['Registrar los terceros (proveedores con NIT)', db.proveedores.length > 0, 'terceros', 'nuevo', 'maestros'],
-    ['Crear los productos (o importarlos desde Excel)', db.productos.length > 0, 'productos', 'nuevo', 'maestros'],
-    ['Cargar el saldo inicial (importación) o la primera compra', db.movimientos.some((m) => m.tipo === 'inicial' || m.tipo === 'entrada'), 'importar', '', 'importar'],
+    ['Crear los productos con sus lotes (o cargarlos desde Excel)', db.productos.length > 0, 'productos', 'nuevo', 'maestros'],
+    ['Crear los servicios y los insumos que consumen', db.servicios.length > 0, 'kits', 'nuevo', 'maestros'],
+    ['Revisar las cuentas contables', !!(db.config.contabilidad && db.config.contabilidad.inventario), 'ccuentas', '', 'config'],
     ['Hacer órdenes de compra y recibir mercancía', db.ordenes.length > 0, 'ordenes', 'nuevo', 'ordenes'],
     ['Registrar traslados y consumos', db.movimientos.some((m) => m.tipo === 'salida' || m.tipo === 'traslado'), 'salidas', 'nuevo', 'salidas'],
     ['Crear usuarios para cada persona', db.usuarios.length > 1, 'usuarios', '', 'usuarios'],
-    ['Hacer el conteo físico y el cierre del periodo', db.cierres.length > 0, 'conteos', '', 'conteoAbrir']
+    ['Hacer el inventario físico y el cierre del periodo', db.cierres.length > 0, 'conteos', '', 'conteoAbrir']
   ];
   const hechos = pasos.filter((p) => p[1]).length;
   return (
+    <Panel title={'Primeros pasos · ' + hechos + ' de ' + pasos.length} icon={Compass} sub="Siga este orden para dejar el inventario funcionando. Cada paso abre la pantalla correspondiente.">
+      <div className="steps">
+        {pasos.map(([t, ok, ruta, arg, perm], i) => (
+          <div key={t} className={'step' + (ok ? ' ok' : '')}>
+            <span className="n">{ok ? <CircleCheck size={20} /> : <Circle size={20} />}</span>
+            <span className="t"><b>{i + 1}.</b> {t}</span>
+            {puede(perm) && <Btn size="sm" icon={ArrowRight} onClick={() => go(ruta, arg)}>Ir</Btn>}
+          </div>
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
+export default function Ayuda() {
+  const { go } = useStore();
+  const [q, setQ] = useState('');
+  const [sec, setSec] = useState('todas');
+  const lista = ARTICULOS.filter(([s, t, , pasos]) => (sec === 'todas' || s === sec) && norm(t + ' ' + pasos.join(' ')).includes(norm(q)));
+  return (
     <div className="stack">
-      <Panel title={'Primeros pasos · ' + hechos + ' de ' + pasos.length} icon={Compass} sub="Siga este orden para dejar el inventario funcionando. Cada paso abre la pantalla correspondiente.">
-        <div className="steps">
-          {pasos.map(([t, ok, ruta, arg, perm], i) => (
-            <div key={t} className={'step' + (ok ? ' ok' : '')}>
-              <span className="n">{ok ? <CircleCheck size={20} /> : <Circle size={20} />}</span>
-              <span className="t"><b>{i + 1}.</b> {t}</span>
-              {puede(perm) && <Btn size="sm" icon={ArrowRight} onClick={() => go(ruta, arg)}>Ir</Btn>}
-            </div>
-          ))}
-        </div>
+      <Panel title="Portal de ayuda" icon={LifeBuoy} sub="Busque cómo hacer cualquier proceso. Cada artículo tiene los pasos y un botón que lo lleva directo a la pantalla.">
+        <div className="toolbar"><SearchBox value={q} onChange={setQ} placeholder="¿Qué necesita hacer? Ej.: crear tercero, lote, orden de compra, Excel…" /></div>
+        <Tabs value={sec} onChange={setSec} options={SECCIONES} />
       </Panel>
       <div className="law">
-        {PROCESOS.map((p) => (
-          <Panel key={p.t}>
-            <h3>{p.t}</h3>
-            <ol className="howto">{p.pasos.map((x, i) => <li key={i}>{x}</li>)}</ol>
-            <Btn variant="primary" size="sm" icon={ArrowRight} onClick={() => go(p.ruta[0], p.ruta[1])}>{p.boton}</Btn>
+        {lista.map(([, t, ruta, pasos]) => (
+          <Panel key={t}>
+            <h3>{t}</h3>
+            <ol className="howto">{pasos.map((x, i) => <li key={i}>{x}</li>)}</ol>
+            <Btn variant="primary" size="sm" icon={ArrowRight} onClick={() => go(ruta[0], ruta[1])}>Ir a la pantalla</Btn>
           </Panel>
         ))}
       </div>
+      {!lista.length && <Panel><p className="muted">No hay artículos con esa búsqueda.</p></Panel>}
     </div>
   );
 }

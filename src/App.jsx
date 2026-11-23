@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-  ArrowRightLeft, BarChart3, Contact, PackageSearch, Boxes, CalendarClock, ClipboardCheck, ClipboardList, Compass, FileSpreadsheet, FolderTree, Hexagon, Layers, Tags, Warehouse,
+  ArrowRightLeft, BarChart3, House, Stethoscope, Calculator, BookOpen, Landmark, LifeBuoy, Bell, Contact, PackageSearch, Boxes, CalendarClock, ClipboardCheck, ClipboardList, Compass, FileSpreadsheet, FolderTree, Hexagon, Layers, Tags, Warehouse,
   LayoutDashboard, Lock, LogOut, Menu, PackageMinus, PackagePlus, RefreshCcw, Scale, ScanSearch, ScrollText,
   Settings, ShoppingCart, SlidersHorizontal, Thermometer, Undo2, UsersRound
 } from 'lucide-react';
@@ -33,51 +33,71 @@ import Login from './views/Login.jsx';
 import Bodegas from './views/Bodegas.jsx';
 import Grupos from './views/Grupos.jsx';
 import LotesMaestro from './views/LotesMaestro.jsx';
-import Guia from './views/Guia.jsx';
+import Guia, { PrimerosPasos } from './views/Guia.jsx';
+import Inicio from './views/Inicio.jsx';
+import { Comprobantes, Auxiliar, Conciliacion, CuentasContables } from './views/Contabilidad.jsx';
 import Existencias from './views/Existencias.jsx';
 import BuscadorGeneral from './components/BuscadorGeneral.jsx';
 
 // [clave, título, ícono, vista, permiso requerido para verla (opcional)]
-const NAV = [
-  ['Operación', [
-    ['panel', 'Centro de control', LayoutDashboard, Dashboard],
-    ['guia', 'Guía de uso', Compass, Guia],
-    ['entradas', 'Entradas', PackagePlus, Entradas],
+// Menú por módulos: cada módulo agrupa varias pantallas que se muestran como pestañas.
+// Pestaña: [ruta, título, ícono, vista, permiso requerido (opcional)]
+const MODULOS = [
+  ['inicio', 'Inicio', House, [
+    ['inicio', 'Inicio', House, Inicio],
+    ['panel', 'Centro de control', LayoutDashboard, Dashboard]
+  ]],
+  ['compras', 'Compras y entradas', PackagePlus, [
+    ['entradas', 'Entradas de inventario', PackagePlus, Entradas],
+    ['ordenes', 'Órdenes de compra', ShoppingCart, Ordenes],
+    ['reabastecimiento', 'Reabastecimiento', RefreshCcw, Reabastecimiento],
+    ['devoluciones', 'Devoluciones', Undo2, Devoluciones]
+  ]],
+  ['salidas', 'Salidas y movimientos', PackageMinus, [
     ['salidas', 'Salidas y consumos', PackageMinus, Salidas],
     ['traslados', 'Traslados', ArrowRightLeft, Traslados],
     ['requisiciones', 'Requisiciones', ClipboardList, Requisiciones],
-    ['devoluciones', 'Devoluciones', Undo2, Devoluciones],
-    ['ajustes', 'Ajustes y bajas', SlidersHorizontal, Ajustes],
-    ['conteos', 'Conteos físicos', ClipboardCheck, Conteos]
+    ['ajustes', 'Ajustes y bajas', SlidersHorizontal, Ajustes]
   ]],
-  ['Reportes', [
-    ['reportes', 'Centro de reportes', BarChart3, Reportes]
-  ]],
-  ['Compras', [
-    ['ordenes', 'Órdenes de compra', ShoppingCart, Ordenes],
-    ['reabastecimiento', 'Reabastecimiento', RefreshCcw, Reabastecimiento]
-  ]],
-  ['Control', [
+  ['kardex', 'Kardex e inventario', ScrollText, [
     ['existencias', 'Existencias', PackageSearch, Existencias],
     ['kardex', 'Kardex', ScrollText, Kardex],
     ['vencimientos', 'Vencimientos', CalendarClock, Lotes],
+    ['conteos', 'Inventario físico', ClipboardCheck, Conteos],
     ['trazabilidad', 'Trazabilidad', ScanSearch, Trazabilidad],
     ['frio', 'Cadena de frío', Thermometer, Frio],
-    ['cierres', 'Cierres de periodo', Lock, Cierres]
+    ['cierres', 'Cierres', Lock, Cierres]
   ]],
-  ['Maestros', [
-    ['bodegas', 'Bodegas', Warehouse, Bodegas],
-    ['grupos', 'Clasificación', FolderTree, Grupos],
-    ['productos', 'Productos', Boxes, Productos],
+  ['productos', 'Productos y servicios', Boxes, [
+    ['productos', 'Productos e insumos', Boxes, Productos],
+    ['kits', 'Servicios', Stethoscope, Kits],
     ['lotes', 'Lotes', Tags, LotesMaestro],
-    ['kits', 'Kits por procedimiento', Layers, Kits],
+    ['grupos', 'Clasificación', FolderTree, Grupos],
+    ['importar', 'Carga desde Excel', FileSpreadsheet, Importar, 'importar']
+  ]],
+  ['terceros', 'Terceros', Contact, [
     ['terceros', 'Terceros (NIT)', Contact, Proveedores]
   ]],
-  ['Sistema', [
-    ['normativa', 'Normativa', Scale, Normativa],
-    ['importar', 'Importar datos', FileSpreadsheet, Importar, 'importar'],
-    ['usuarios', 'Usuarios y roles', UsersRound, Usuarios, 'usuarios'],
-    ['config', 'Configuración', Settings, Configuracion, 'config']
+  ['contabilidad', 'Contabilidad', Calculator, [
+    ['comprobantes', 'Comprobantes', BookOpen, Comprobantes],
+    ['auxiliar', 'Libro auxiliar', Scale, Auxiliar],
+    ['conciliacion', 'Conciliación', Landmark, Conciliacion],
+    ['ccuentas', 'Cuentas contables', Settings, CuentasContables]
+  ]],
+  ['reportes', 'Reportes', BarChart3, [
+    ['reportes', 'Centro de reportes', BarChart3, Reportes]
+  ]],
+  ['config', 'Configuración', Settings, [
+    ['config', 'General', Settings, Configuracion, 'config'],
+    ['bodegas', 'Bodegas', Warehouse, Bodegas, 'config'],
+    ['usuarios', 'Usuarios y roles', UsersRound, Usuarios, 'usuarios']
+  ]],
+  ['normatividad', 'Normatividad', Scale, [
+    ['normativa', 'Normatividad', Scale, Normativa]
+  ]],
+  ['ayuda', 'Portal de ayuda', LifeBuoy, [
+    ['ayuda', 'Portal de ayuda', LifeBuoy, Guia],
+    ['guia', 'Primeros pasos', Compass, PrimerosPasos]
   ]]
 ];
 
@@ -94,10 +114,10 @@ function Reloj() {
 export default function App() {
   const { db, state, hoy, ruta, toasts, usuario, requiereLogin, salir, puede } = useStore();
   const [menu, setMenu] = useState(false);
-  const nav = NAV.map(([g, items]) => [g, items.filter((x) => !x[4] || puede(x[4]))]).filter(([, items]) => items.length);
-  const plano = nav.flatMap(([, items]) => items);
+  const modulos = MODULOS.map(([k, l, I, tabs]) => [k, l, I, tabs.filter((t) => !t[4] || puede(t[4]))]).filter((m) => m[3].length);
   const vistaRuta = ruta.vista === 'proveedores' ? 'terceros' : ruta.vista;
-  const actual = plano.find((x) => x[0] === vistaRuta) || plano[0];
+  const modulo = modulos.find((m) => m[3].some((t) => t[0] === vistaRuta)) || modulos[0];
+  const actual = modulo[3].find((t) => t[0] === vistaRuta) || modulo[3][0];
   const Vista = actual[3];
   const criticas = requiereLogin ? 0 : C.alertas(db, state, hoy).filter((a) => a.nivel === 'critico').length;
   const rqPend = db.requisiciones.filter((r) => ['pendiente', 'parcial'].includes(C.estadoRequisicion(db, r).estado)).length;
@@ -112,7 +132,7 @@ export default function App() {
       <div className="cosmos" aria-hidden="true"><div className="aurora" /><div className="stars" /><div className="floor" /></div>
       <div className="app">
         <aside className={'sidebar' + (menu ? ' open' : '')}>
-          <div className="brand">
+          <div className="brand" onClick={() => { window.location.hash = '#/inicio'; }} style={{ cursor: 'pointer' }} title="Inicio">
             <div className="brand-mark"><Hexagon size={20} /></div>
             <div>
               <div className="brand-name">NOV<span>A</span></div>
@@ -120,17 +140,12 @@ export default function App() {
             </div>
           </div>
           <nav className="nav">
-            {nav.map(([grupo, items]) => (
-              <div key={grupo}>
-                <div className="nav-group">{grupo}</div>
-                {items.map(([k, label, Icon]) => (
-                  <a key={k} href={'#/' + k} className={actual[0] === k ? 'active' : ''}>
-                    <Icon size={18} />{label}
-                    {k === 'panel' && criticas > 0 && <span className="count">{criticas}</span>}
-                    {k === 'requisiciones' && rqPend > 0 && <span className="count">{rqPend}</span>}
-                  </a>
-                ))}
-              </div>
+            {modulos.map(([k, label, Icon, tabs]) => (
+              <a key={k} href={'#/' + tabs[0][0]} className={modulo[0] === k ? 'active' : ''}>
+                <span className="nav-ico"><Icon size={17} /></span>{label}
+                {k === 'inicio' && criticas > 0 && <span className="count">{criticas}</span>}
+                {k === 'salidas' && rqPend > 0 && <span className="count">{rqPend}</span>}
+              </a>
             ))}
           </nav>
           <div className="sidebar-foot">
@@ -143,12 +158,14 @@ export default function App() {
           <header className="topbar">
             <button type="button" className="btn menu-btn icon-btn" onClick={() => setMenu((m) => !m)} aria-label="Abrir menú"><Menu size={18} /></button>
             <div>
-              <div className="crumb">NOVA · {(nav.find(([, items]) => items.includes(actual)) || ['Inicio'])[0]}</div>
+              <div className="crumb">NOVA · {modulo[1]}</div>
               <h1>{actual[1]}</h1>
             </div>
             <BuscadorGeneral />
             <div className="spacer" />
             <Reloj />
+            <a className="btn icon-btn bell" href="#/panel" title={criticas + ' alertas críticas'} aria-label="Alertas"><Bell size={17} />{criticas > 0 && <span className="count">{criticas}</span>}</a>
+            <a className="btn sm" href="#/ayuda" title="Portal de ayuda"><LifeBuoy size={15} /> Ayuda</a>
             {usuario && (
               <div className="userchip">
                 <div className="who"><b>{usuario.nombre}</b><span>{C.ROLES[usuario.rol]}{usuario.bodega ? ' · ' + usuario.bodega : ''}</span></div>
@@ -156,7 +173,16 @@ export default function App() {
               </div>
             )}
           </header>
-          <Vista key={ruta.vista + '/' + ruta.arg} arg={ruta.arg} />
+          {modulo[3].length > 1 && (
+            <div className="modtabs">
+              {modulo[3].map(([k, label, Icon]) => (
+                <a key={k} href={'#/' + k} className={actual[0] === k ? 'on' : ''}><Icon size={15} />{label}
+                  {k === 'requisiciones' && rqPend > 0 && <span className="count">{rqPend}</span>}
+                </a>
+              ))}
+            </div>
+          )}
+          <Vista key={ruta.vista + '/' + ruta.arg} arg={ruta.arg} modulos={modulos} />
         </main>
       </div>
       <Toasts items={toasts} />

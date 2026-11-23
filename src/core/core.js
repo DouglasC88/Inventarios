@@ -145,7 +145,8 @@ function configBase() {
     limiteFaltantes: 3,
     frio: { min: 2, max: 8 },
     ubicaciones: ['Bodega principal'],
-    reabastecimiento: { consumoDias: 90, seguridadDias: 7, coberturaDias: 30 }
+    reabastecimiento: { consumoDias: 90, seguridadDias: 7, coberturaDias: 30 },
+    contabilidad: cuentasBase()
   };
 }
 
@@ -155,10 +156,128 @@ function dbVacia() {
     config: configBase(),
     productos: [], proveedores: [], movimientos: [], conteos: [], cierres: [],
     temperaturas: [], auditoria: [], ordenes: [], requisiciones: [], kits: [], usuarios: [],
+    servicios: [],
     bodegas: [{ id: 'b-principal', codigo: 'BP', nombre: 'Bodega principal', tipo: 'bodega', responsable: '', sede: '', activa: true }],
     grupos: [], lotes: [],
     seq: { orden: 0 }
   };
+}
+
+// ---------- Contabilidad (PUC colombiano, cuentas configurables) ----------
+const CONCEPTOS_CONTABLES = {
+  inventario: 'Inventario de materiales e insumos',
+  proveedores: 'Proveedores nacionales (compras)',
+  costosAdic: 'Fletes y costos adicionales por pagar',
+  costoConsumo: 'Costo por consumo en servicios de salud',
+  costoVenta: 'Costo de venta de insumos',
+  faltantes: 'Pérdida por faltantes y bajas',
+  sobrantes: 'Ingreso por sobrantes de inventario',
+  deterioroGasto: 'Gasto por deterioro de inventario (VNR)',
+  deterioroInv: 'Deterioro acumulado del inventario (menor valor)',
+  recuperacion: 'Recuperación de deterioro',
+  apertura: 'Contrapartida de saldos iniciales'
+};
+function cuentasBase() {
+  return {
+    inventario: { cuenta: '1455', nombre: 'Materiales, repuestos y accesorios' },
+    proveedores: { cuenta: '2205', nombre: 'Proveedores nacionales' },
+    costosAdic: { cuenta: '2335', nombre: 'Costos y gastos por pagar' },
+    costoConsumo: { cuenta: '6155', nombre: 'Servicios sociales y de salud' },
+    costoVenta: { cuenta: '6135', nombre: 'Comercio al por mayor y al por menor' },
+    faltantes: { cuenta: '5315', nombre: 'Gastos extraordinarios' },
+    sobrantes: { cuenta: '4295', nombre: 'Diversos' },
+    deterioroGasto: { cuenta: '5199', nombre: 'Provisiones' },
+    deterioroInv: { cuenta: '1499', nombre: 'Provisiones' },
+    recuperacion: { cuenta: '4250', nombre: 'Recuperaciones' },
+    apertura: { cuenta: '3705', nombre: 'Utilidades acumuladas' },
+    centroCostoPorBodega: true
+  };
+}
+/** Cuenta de un concepto; la clasificación del producto (o su línea/grupo padre) puede tener su propia cuenta. */
+function cuentaDe(db, concepto, producto) {
+  const base = Object.assign(cuentasBase(), db.config.contabilidad || {});
+  let g = producto ? db.grupos.find((x) => x.id === producto.grupoId) : null, guard = 0;
+  while (g && guard++ < 10) {
+    if (g.cuentas && g.cuentas[concepto]) return { cuenta: g.cuentas[concepto], nombre: (base[concepto] || {}).nombre + ' · ' + g.nombre };
+    g = g.parentId ? db.grupos.find((x) => x.id === g.parentId) : null;
+  }
+  return base[concepto] || { cuenta: '', nombre: concepto };
+}
+
+/** Comprobantes contables generados por los movimientos de inventario y los cierres. */
+function comprobantesContables(db, state, f) {
+  f = f || {};
+  const cfg = Object.assign(cuentasBase(), db.config.contabilidad || {});
+  const out = [];
+  const nit = (id) => { const t = db.proveedores.find((x) => x.id === id); return t ? String(t.nit || '') : ''; };
+  const cc = (b) => (cfg.centroCostoPorBodega ? ((db.bodegas.find((x) => x.nombre === b) || {}).codigo || b) : '');
+  for (const m of ordenar(db.movimientos)) {
+    if (m.anulado || (f.desde && m.fecha < f.desde) || (f.hasta && m.fecha > f.hasta) || m.tipo === 'traslado') continue;
+    const c = state.movCost[m.id];
+    if (!c) continue;
+    const lineas = [];
+    const add = (concepto, producto, debito, credito, tercero, centro, detalle) => {
+      const cu = cuentaDe(db, concepto, producto);
+      const ex = lineas.find((x) => x.cuenta === cu.cuenta && x.tercero === tercero && x.centro === centro && (debito > 0) === (x.debito > 0));
+      if (ex) { ex.debito = r2(ex.debito + debito); ex.credito = r2(ex.credito + credito); return; }
+      lineas.push({ cuenta: cu.cuenta, nombre: cu.nombre, concepto, debito: r2(debito), credito: r2(credito), tercero: tercero || '', centro: centro || '', detalle });
+    };
+    m.lineas.forEach((l, i) => {
+      const p = db.productos.find((x) => x.id === l.productoId);
+      const v = c.lineas[i].valor;
+      if (!v) return;
+      const b = l.bodega || bodegaDe(m, db.config);
+      const q = Number(l.cantidad);
+      if (m.tipo === 'entrada') {
+        const base = Number(l.cantidad) * Number(l.costoUnit || 0);
+        add('inventario', p, v, 0, '', cc(b), 'Compra ' + m.docTipo + ' ' + m.docNum);
+        add('proveedores', p, 0, r2(base), nit(m.proveedorId), '', 'Compra ' + m.docTipo + ' ' + m.docNum);
+        if (r2(v - base) > 0) add('costosAdic', p, 0, r2(v - base), '', '', 'Costos adicionales de la compra');
+      } else if (m.tipo === 'inicial') {
+        add('inventario', p, v, 0, '', cc(b), 'Saldo inicial'); add('apertura', p, 0, v, '', '', 'Saldo inicial');
+      } else if (m.tipo === 'salida') {
+        add(m.destinoTipo === 'Venta' ? 'costoVenta' : 'costoConsumo', p, v, 0, '', cc(b), (m.destinoTipo || 'Salida') + ': ' + (m.destino || '') + (m.procedimiento ? ' · ' + m.procedimiento : ''));
+        add('inventario', p, 0, v, '', cc(b), 'Salida de inventario');
+      } else if (m.tipo === 'devolucion') {
+        add('proveedores', p, v, 0, nit(m.proveedorId), '', 'Devolución ' + (m.docNum || ''));
+        add('inventario', p, 0, v, '', cc(b), 'Devolución a proveedor');
+      } else if (m.tipo === 'baja' || (m.tipo === 'ajuste' && q < 0)) {
+        add('faltantes', p, v, 0, '', cc(b), m.tipo === 'baja' ? 'Baja: ' + (CAUSAS_BAJA[m.causa] || '') : 'Ajuste: ' + (CAUSAS_AJUSTE[l.causa] || ''));
+        add('inventario', p, 0, v, '', cc(b), 'Salida por ' + (m.tipo === 'baja' ? 'baja' : 'ajuste'));
+      } else if (m.tipo === 'ajuste' && q > 0) {
+        add('inventario', p, v, 0, '', cc(b), 'Ajuste: ' + (CAUSAS_AJUSTE[l.causa] || ''));
+        add('sobrantes', p, 0, v, '', cc(b), 'Ajuste: ' + (CAUSAS_AJUSTE[l.causa] || ''));
+      }
+    });
+    if (!lineas.length) continue;
+    out.push({ id: m.id, fecha: m.fecha, num: 'CT-' + m.num, documento: m.num, tipo: TIPOS_MOV[m.tipo], descripcion: detalleMov(db, m, m.lineas[0]), lineas });
+  }
+  db.cierres.forEach((ci) => {
+    if ((f.desde && ci.fecha < f.desde) || (f.hasta && ci.fecha > f.hasta)) return;
+    const lineas = [];
+    if (ci.nuevoDeterioro > 0) {
+      lineas.push({ cuenta: cuentaDe(db, 'deterioroGasto').cuenta, nombre: cuentaDe(db, 'deterioroGasto').nombre, concepto: 'deterioroGasto', debito: ci.nuevoDeterioro, credito: 0, tercero: '', centro: '', detalle: 'Deterioro por VNR (NIC 2)' });
+      lineas.push({ cuenta: cuentaDe(db, 'deterioroInv').cuenta, nombre: cuentaDe(db, 'deterioroInv').nombre, concepto: 'deterioroInv', debito: 0, credito: ci.nuevoDeterioro, tercero: '', centro: '', detalle: 'Deterioro por VNR (NIC 2)' });
+    }
+    if (ci.reversion > 0) {
+      lineas.push({ cuenta: cuentaDe(db, 'deterioroInv').cuenta, nombre: cuentaDe(db, 'deterioroInv').nombre, concepto: 'deterioroInv', debito: ci.reversion, credito: 0, tercero: '', centro: '', detalle: 'Reversión de deterioro' });
+      lineas.push({ cuenta: cuentaDe(db, 'recuperacion').cuenta, nombre: cuentaDe(db, 'recuperacion').nombre, concepto: 'recuperacion', debito: 0, credito: ci.reversion, tercero: '', centro: '', detalle: 'Reversión de deterioro' });
+    }
+    if (lineas.length) out.push({ id: ci.id, fecha: ci.fecha, num: 'CT-' + ci.num, documento: ci.num, tipo: 'Cierre', descripcion: 'Ajuste por valor neto realizable', lineas });
+  });
+  out.sort((a, b) => (a.fecha < b.fecha ? -1 : a.fecha > b.fecha ? 1 : 0));
+  out.forEach((cp) => { cp.debito = r2(cp.lineas.reduce((a, x) => a + x.debito, 0)); cp.credito = r2(cp.lineas.reduce((a, x) => a + x.credito, 0)); cp.cuadra = Math.abs(cp.debito - cp.credito) < 0.01; });
+  return out;
+}
+
+/** Saldo de cada cuenta en los comprobantes (para auxiliares y conciliación). */
+function saldosContables(comprobantes) {
+  const s = {};
+  comprobantes.forEach((cp) => cp.lineas.forEach((l) => {
+    const x = s[l.cuenta] || (s[l.cuenta] = { cuenta: l.cuenta, nombre: l.nombre, debito: 0, credito: 0 });
+    x.debito = r2(x.debito + l.debito); x.credito = r2(x.credito + l.credito);
+  }));
+  return Object.values(s).map((x) => Object.assign(x, { saldo: r2(x.debito - x.credito) })).sort((a, b) => a.cuenta.localeCompare(b.cuenta));
 }
 
 // ---------- Terceros ----------
@@ -569,7 +688,9 @@ function validarMovimiento(db, mov, hoy) {
   }
   if (mov.tipo === 'inicial') {
     if (!String(mov.acta || '').trim()) e.push('Indique el soporte del saldo inicial (acta o inventario de apertura).');
-    if (db.movimientos.some((m) => !m.anulado && m.tipo !== 'inicial' && m.fecha < mov.fecha)) e.push('El saldo inicial debe tener fecha anterior a los demás movimientos.');
+    const prodsMov = new Set((mov.lineas || []).map((l) => l.productoId));
+    const previos = db.movimientos.filter((m) => !m.anulado && m.tipo !== 'inicial' && m.fecha < mov.fecha && m.lineas.some((l) => prodsMov.has(l.productoId)));
+    if (previos.length) e.push('El saldo inicial de un producto debe tener fecha anterior a sus demás movimientos (' + previos[0].num + '). Para productos que ya tienen movimientos use el inventario físico.');
   }
   if (mov.tipo === 'salida' && !String(mov.destino || '').trim()) e.push('Indique el destino de la salida (paciente, consultorio o servicio).');
   if (mov.tipo === 'traslado') {
@@ -1104,7 +1225,7 @@ const COLUMNAS_IMPORT = {
   bodega: ['bodega', 'ubicacion', 'ubicación', 'almacen', 'almacén'],
   lote: ['lote'],
   vence: ['vence', 'vencimiento', 'fecha de vencimiento', 'fecha vencimiento', 'caducidad'],
-  cantidad: ['cantidad', 'existencia', 'saldo', 'stock', 'cant'],
+  cantidad: ['cantidad', 'existencia', 'saldo', 'stock', 'cant', 'cantidad contada', 'contado', 'conteo', 'fisico', 'físico', 'cantidad fisica', 'cantidad física'],
   costoUnit: ['costo', 'costo unitario', 'costo unit', 'valor unitario', 'precio']
 };
 
@@ -1162,6 +1283,77 @@ function interpretarImportacion(filas, db) {
   return { errores, productos: Object.values(productos), saldos, columnas: idx };
 }
 
+// ---------- Inventario físico desde Excel ----------
+/** Plantilla de conteo con las existencias actuales (la columna "Cantidad contada" va vacía). */
+function plantillaInventarioFisico(db, state, hoy, bodega) {
+  const filas = [['Código', 'Descripción', 'Bodega', 'Lote', 'Vencimiento', 'Cantidad en sistema', 'Cantidad contada', 'Costo unitario (solo lotes nuevos)']];
+  lotes(db, state, hoy, { bodega: bodega && bodega !== 'todas' ? bodega : undefined })
+    .sort((a, b) => (a.bodega + a.producto.nombre).localeCompare(b.bodega + b.producto.nombre))
+    .forEach((l) => filas.push([l.producto.codigo, l.producto.nombre, l.bodega, l.lote, l.vence, r2(l.qty), '', '']));
+  return filas;
+}
+
+/**
+ * Convierte un archivo de inventario físico en líneas de conteo comparadas con el sistema.
+ * opts: { bodega: bodega por defecto, alcance: 'archivo' | 'bodega' | 'todo' }
+ */
+function conteoDesdeFilas(db, state, filas, opts) {
+  opts = opts || {};
+  const errores = [], avisos = [];
+  if (!filas || filas.length < 2) return { errores: ['El archivo no tiene datos.'], avisos, lineas: [] };
+  const enc = filas[0].map(norm);
+  const col = (alias) => enc.findIndex((h) => alias.map(norm).includes(h));
+  const idx = {
+    codigo: col(COLUMNAS_IMPORT.codigo), bodega: col(COLUMNAS_IMPORT.bodega), lote: col(COLUMNAS_IMPORT.lote),
+    vence: col(COLUMNAS_IMPORT.vence), costo: col(['costo unitario (solo lotes nuevos)', ...COLUMNAS_IMPORT.costoUnit]),
+    contado: col(['cantidad contada', 'contado', 'conteo', 'fisico', 'físico', 'cantidad fisica', 'cantidad física'])
+  };
+  if (idx.contado < 0) idx.contado = col(['cantidad', 'existencia', 'saldo', 'stock', 'cant']);
+  if (idx.codigo < 0) errores.push('Falta la columna "Código".');
+  if (idx.contado < 0) errores.push('Falta la columna "Cantidad contada".');
+  if (errores.length) return { errores, avisos, lineas: [] };
+  const v = (f, k) => (idx[k] < 0 ? '' : f[idx[k]]);
+  const porClave = {};
+  const sinDig = (s) => String(s || '').replace(/^0+/, '');
+  filas.slice(1).forEach((f, i) => {
+    const fila = i + 2;
+    const codigo = String(v(f, 'codigo') || '').trim();
+    const crudo = v(f, 'contado');
+    if (!codigo) return;
+    if (crudo === '' || crudo === null || crudo === undefined) { avisos.push('Fila ' + fila + ': ' + codigo + ' sin cantidad contada; se omite.'); return; }
+    const contado = aNumero(crudo);
+    if (!isFinite(contado) || contado < 0) { errores.push('Fila ' + fila + ': la cantidad contada no es válida.'); return; }
+    const p = db.productos.find((x) => x.codigo.toUpperCase() === codigo.toUpperCase() || (x.codigoAlterno && x.codigoAlterno.toUpperCase() === codigo.toUpperCase()) || (x.gtin && sinDig(x.gtin) === sinDig(codigo)));
+    if (!p) { errores.push('Fila ' + fila + ': el código ' + codigo + ' no existe. Créelo en Productos o use "Carga desde Excel".'); return; }
+    const bodega = String(v(f, 'bodega') || '').trim() || opts.bodega || bodegaPrincipal(db.config);
+    if (!db.config.ubicaciones.includes(bodega)) { errores.push('Fila ' + fila + ': la bodega "' + bodega + '" no existe.'); return; }
+    const lote = String(v(f, 'lote') || '').trim();
+    if (!lote && p.controlaLote !== false) { errores.push('Fila ' + fila + ': ' + p.codigo + ' maneja lote y la fila no lo trae.'); return; }
+    const s = state.prods[p.id];
+    const enSistema = s ? Object.values(s.lots).find((l) => l.bodega === bodega && l.lote.toUpperCase() === lote.toUpperCase()) : null;
+    const maestro = buscarLote(db, p.id, lote);
+    const vence = enSistema ? enSistema.vence : (aFecha(v(f, 'vence')) || (maestro ? maestro.vence : ''));
+    if (!enSistema && !vence && p.controlaVence !== false && contado > 0) { errores.push('Fila ' + fila + ': el lote ' + lote + ' de ' + p.codigo + ' no está en el sistema; indique su fecha de vencimiento.'); return; }
+    const k = lotKey(bodega, lote, vence) + '|' + p.id;
+    const costo = aNumero(v(f, 'costo'));
+    const x = porClave[k] || (porClave[k] = { productoId: p.id, bodega, lote: enSistema ? enSistema.lote : lote, vence, sistema: enSistema ? enSistema.qty : 0, contado: 0, nuevo: !enSistema, filas: [] });
+    x.contado = r2(x.contado + contado);
+    x.filas.push(fila);
+    if (!enSistema && isFinite(costo) && costo >= 0) x.costoUnit = costo;
+  });
+  const lineas = Object.values(porClave);
+  if (opts.alcance === 'bodega' || opts.alcance === 'todo') {
+    lotes(db, state, opts.hoy || todayISO()).forEach((l) => {
+      if (opts.alcance === 'bodega' && l.bodega !== (opts.bodega || bodegaPrincipal(db.config))) return;
+      if (lineas.some((x) => x.productoId === l.productoId && x.bodega === l.bodega && x.lote.toUpperCase() === l.lote.toUpperCase())) return;
+      lineas.push({ productoId: l.productoId, bodega: l.bodega, lote: l.lote, vence: l.vence, sistema: l.qty, contado: 0, nuevo: false, noContado: true, filas: [] });
+    });
+  }
+  const dup = lineas.filter((x) => x.filas.length > 1);
+  if (dup.length) avisos.push(dup.length + ' lote(s) aparecen en varias filas; se sumaron las cantidades.');
+  return { errores, avisos, lineas: lineas.map((x) => Object.assign(x, { diferencia: r2(x.contado - x.sistema) })) };
+}
+
 // ---------- CSV ----------
 function csv(filas) {
   const celda = (v) => {
@@ -1172,6 +1364,7 @@ function csv(filas) {
 }
 
 export {
+  CONCEPTOS_CONTABLES, cuentasBase, cuentaDe, comprobantesContables, saldosContables,
   NIVELES_GRUPO, TIPOS_MATERIAL, nivelGrupo, rutaGrupo, gruposDescendientes, arbolGrupos, lineasMovimiento,
   TIPOS_DOC, TIPOS_TERCERO, calcularDV, documentoTercero, normalizarTercero,
   TIPOS_BODEGA, sincronizarBodegas, renombrarBodega, bodegaEnUso,
@@ -1187,5 +1380,5 @@ export {
   consumoPorProducto, reabastecimiento, analisisABC, rotacion, consumoPorDestino, sinMovimiento,
   faltantesAnio, alertas, tempEnRango, cumplimiento,
   prepararCierre, crearConteo, diferenciasConteo, trazabilidad, parseGS1,
-  parseCSV, aNumero, aFecha, interpretarImportacion, csv
+  parseCSV, aNumero, aFecha, interpretarImportacion, plantillaInventarioFisico, conteoDesdeFilas, csv
 };

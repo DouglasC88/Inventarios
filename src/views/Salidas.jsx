@@ -20,7 +20,7 @@ function NuevaSalida({ onClose }) {
   const asignaciones = asignarFEFO(state, lineas, h.fecha || hoy, h.bodega);
 
   const aplicarKit = () => {
-    const k = db.kits.find((x) => x.id === kit.id);
+    const k = db.servicios.find((x) => x.id === kit.id);
     if (!k) return;
     const nuevas = C.expandirKit(k, kit.veces);
     setLineas((ls) => [...ls.filter((l) => l.productoId || l.cantidad), ...nuevas]);
@@ -58,13 +58,13 @@ function NuevaSalida({ onClose }) {
         <Field label="Responsable"><input className="input" value={h.responsable} onChange={setHk('responsable')} /></Field>
       </div>
 
-      {db.kits.length > 0 && (
+      {db.servicios.length > 0 && (
         <>
-          <div className="section-title">Kit por procedimiento</div>
+          <div className="section-title">Servicio realizado (descuenta sus insumos)</div>
           <div className="toolbar">
             <div style={{ width: 340, maxWidth: '100%' }}><SelectKit value={kit.id} onChange={(v) => setKit((k) => Object.assign({}, k, { id: v }))} /></div>
             <input className="input num" type="number" min="1" value={kit.veces} onChange={(e) => setKit((k) => Object.assign({}, k, { veces: e.target.value }))} style={{ width: 90 }} title="Número de procedimientos" />
-            <Btn icon={Layers} onClick={aplicarKit} disabled={!kit.id}>Agregar insumos del kit</Btn>
+            <Btn icon={Layers} onClick={aplicarKit} disabled={!kit.id}>Agregar insumos del servicio</Btn>
           </div>
         </>
       )}

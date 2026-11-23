@@ -81,11 +81,13 @@ export function crearDemo(hoy) {
     P('p11', 'CEP-IMP', 'Cepillo de profilaxis', 'insumo', 'N/A', 'unidad', 40, { unidadCompra: 'bolsa x50', factorCompra: 50, leadTime: 4, grupoId: 'g71' , presentacion: 'Unidad', tipoMaterial: 'consumible', stockMax: 150 })
   ];
 
-  db.kits = [
-    { id: 'k1', codigo: 'KIT-RES2', nombre: 'Resina clase II', lineas: [{ productoId: 'p1', cantidad: 0.25 }, { productoId: 'p3', cantidad: 1 }, { productoId: 'p6', cantidad: 1 }, { productoId: 'p2', cantidad: 0.02 }] },
-    { id: 'k2', codigo: 'KIT-IMP', nombre: 'Implante unitario', lineas: [{ productoId: 'p7', cantidad: 1 }, { productoId: 'p3', cantidad: 2 }, { productoId: 'p6', cantidad: 2 }, { productoId: 'p2', cantidad: 0.04 }] },
-    { id: 'k3', codigo: 'KIT-PROF', nombre: 'Profilaxis', lineas: [{ productoId: 'p11', cantidad: 1 }, { productoId: 'p2', cantidad: 0.02 }] }
+  db.servicios = [
+    { id: 'k1', codigo: 'SRV-RES2', nombre: 'Resina clase II', categoria: 'Operatoria', cups: '', precio: 180000, ivaPct: 0, duracion: 45, activo: true, lineas: [{ productoId: 'p1', cantidad: 0.25 }, { productoId: 'p3', cantidad: 1 }, { productoId: 'p6', cantidad: 1 }, { productoId: 'p2', cantidad: 0.02 }] },
+    { id: 'k2', codigo: 'SRV-IMP', nombre: 'Implante unitario', categoria: 'Cirugía e implantología', cups: '', precio: 2800000, ivaPct: 0, duracion: 90, activo: true, lineas: [{ productoId: 'p7', cantidad: 1 }, { productoId: 'p3', cantidad: 2 }, { productoId: 'p6', cantidad: 2 }, { productoId: 'p2', cantidad: 0.04 }] },
+    { id: 'k3', codigo: 'SRV-PROF', nombre: 'Profilaxis', categoria: 'Higiene oral', cups: '', precio: 90000, ivaPct: 0, duracion: 30, activo: true, lineas: [{ productoId: 'p11', cantidad: 1 }, { productoId: 'p2', cantidad: 0.02 }] },
+    { id: 'k4', codigo: 'SRV-VAL', nombre: 'Consulta de valoración', categoria: 'Consulta', cups: '', precio: 60000, ivaPct: 0, duracion: 20, activo: true, lineas: [{ productoId: 'p2', cantidad: 0.02 }] }
   ];
+  db.kits = [];
 
   const mov = (tipo, fecha, datos, lineas) => {
     const m = Object.assign({ id: C.nuevoId(), tipo, fecha, bodega: BP, lineas, creado: fecha + 'T09:00:00', usuario: 'Almacenista' }, datos);

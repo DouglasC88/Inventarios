@@ -1,4 +1,4 @@
-import { Activity, ArrowRightLeft, BarChart3, Boxes, CalendarClock, Compass, Layers, PackageMinus, PackagePlus, ShieldCheck, ShoppingCart, Tags, TrendingDown, TriangleAlert, Wallet, Warehouse } from 'lucide-react';
+import { Activity, ArrowRightLeft, BarChart3, ClipboardCheck, Boxes, CalendarClock, Compass, Layers, PackageMinus, PackagePlus, ShieldCheck, ShoppingCart, Tags, TrendingDown, TriangleAlert, Wallet, Warehouse } from 'lucide-react';
 import { useStore, C } from '../store.jsx';
 import { Btn, Chip, Gauge, Kpi, Panel, Empty } from '../components/ui.jsx';
 import { money, num, pct, fecha, TONO_MOV } from '../format.js';
@@ -14,6 +14,7 @@ export default function Dashboard() {
     ['Traslado', ArrowRightLeft, 'traslados', 'traslados'],
     ['Nuevo producto', Boxes, 'productos', 'maestros'],
     ['Nuevo lote', Tags, 'lotes', 'maestros'],
+    ['Inventario físico (Excel)', ClipboardCheck, 'conteos', 'conteoAbrir', 'excel'],
     ['Nueva bodega', Warehouse, 'bodegas', 'config']
   ].filter((a) => puede(a[3]));
   const lineas = C.arbolGrupos(db).filter((g) => g.nivel === 1);
@@ -52,7 +53,7 @@ export default function Dashboard() {
 
       {acciones.length > 0 && (
         <div className="quick">
-          {acciones.map(([t, Icon, ruta]) => <Btn key={t} icon={Icon} onClick={() => go(ruta, 'nuevo')}>{t}</Btn>)}
+          {acciones.map(([t, Icon, ruta, , arg]) => <Btn key={t} icon={Icon} onClick={() => go(ruta, arg || 'nuevo')}>{t}</Btn>)}
           <Btn icon={BarChart3} onClick={() => go('reportes')}>Reportes</Btn>
           <Btn variant="ghost" icon={Compass} onClick={() => go('guia')}>Guía de uso</Btn>
         </div>

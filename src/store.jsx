@@ -9,7 +9,7 @@ const Ctx = createContext(null);
 function normalizar(d) {
   const base = C.dbVacia();
   const db = Object.assign(base, d);
-  ['productos', 'proveedores', 'movimientos', 'conteos', 'cierres', 'temperaturas', 'auditoria', 'ordenes', 'requisiciones', 'kits', 'usuarios', 'bodegas', 'grupos', 'lotes']
+  ['productos', 'proveedores', 'movimientos', 'conteos', 'cierres', 'temperaturas', 'auditoria', 'ordenes', 'requisiciones', 'kits', 'usuarios', 'bodegas', 'grupos', 'lotes', 'servicios']
     .forEach((k) => { if (!Array.isArray(db[k])) db[k] = []; });
   db.config = Object.assign(C.configBase(), d.config || {});
   db.config.empresa = Object.assign(C.configBase().empresa, (d.config || {}).empresa || {});
@@ -24,6 +24,9 @@ function normalizar(d) {
   }
   C.sincronizarBodegas(db);
   db.proveedores = db.proveedores.map(C.normalizarTercero);
+  // Los kits por procedimiento pasan a ser servicios con sus insumos.
+  if (!Array.isArray(d.servicios) && db.kits.length) db.servicios = db.kits.map((k) => Object.assign({ categoria: '', cups: '', precio: '', ivaPct: '', duracion: '', activo: true }, k));
+  db.config.contabilidad = Object.assign(C.cuentasBase(), (d.config || {}).contabilidad || {});
   if (!Array.isArray(d.lotes)) C.ordenar(db.movimientos).forEach((m) => { if (!m.anulado) C.asegurarLotes(db, m); });
   return db;
 }
@@ -42,7 +45,7 @@ function cargar() {
 function leerRuta() {
   const h = (window.location.hash || '').replace(/^#\/?/, '');
   const [vista, ...resto] = h.split('/');
-  return { vista: vista || 'panel', arg: resto.join('/') ? decodeURIComponent(resto.join('/')) : '' };
+  return { vista: vista || 'inicio', arg: resto.join('/') ? decodeURIComponent(resto.join('/')) : '' };
 }
 
 function leerSesion() {

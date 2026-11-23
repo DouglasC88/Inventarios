@@ -8,40 +8,23 @@ Aplicación JavaScript (React + Vite) con interfaz futurista tipo HUD en blanco 
 
 **Producción:** https://fluxstock-indol.vercel.app/ (despliegue automático de Vercel desde `main`).
 
-## Módulos
+## Menú (11 secciones, cada una con sus pestañas)
 
-| Área | Módulo | Qué hace | Norma o referencia |
-| --- | --- | --- | --- |
-| Operación | Centro de control | Acciones rápidas, valor del inventario por grupo, alertas e indicador de cumplimiento | — |
-| | Guía de uso | Primeros pasos y cómo hacer una orden de compra, una entrada, un lote | — |
-| | Entradas | Compras con factura electrónica o documento soporte, con o sin orden de compra; lote, vencimiento, lectura GS1/UDI, unidad de compra y prorrateo de costos adicionales | ET art. 771-2, NIC 2 |
-| | Salidas y consumos | Consumo por paciente, consultorio, servicio o procedimiento; kits; lotes por FEFO dentro de la bodega | Res. 1403/2007 |
-| | Traslados | Movimiento entre bodegas, consultorios y neveras conservando lote | — |
-| | Requisiciones | El consultorio pide, la bodega atiende con traslado; control de pendientes | Flujo tipo Dentos |
-| | Devoluciones | Devolución a proveedor por calidad, vencimiento, error o retiro | Res. 4816/2008 |
-| | Ajustes y bajas | Faltantes, sobrantes y bajas con causa, acta y autorización; control del 3 % | ET art. 64 |
-| | Conteos físicos | Anual y cíclico, por bodega o categoría; las diferencias generan el ajuste | C. de Co. art. 52 |
-| Compras | Órdenes de compra | Pedido, recepción parcial o total, cierre de saldo, impresión | Flujo tipo SAP |
-| | Reabastecimiento | Punto de reorden por consumo real, stock de seguridad y pedido sugerido por proveedor | MRP tipo SAP |
-| Control | Existencias | Tarjeta General (todas las bodegas) y una tarjeta por bodega; insumos con stock, lotes, vencimientos y valor; buscador por nombre, código o lote | — |
-| | Kardex | Kardex permanente por promedio ponderado o PEPS (sin UEPS), existencias por bodega | ET arts. 62 y 65, NIC 2 |
-| | Lotes y vencimientos | Semáforo por bodega y baja de vencidos | Res. 1403/2007 |
-| | Trazabilidad | Proveedor, factura, bodega y paciente de cada lote | Res. 4816/2008 |
-| | Cadena de frío | Registro de temperaturas y alertas fuera de rango | Res. 3100/2019 |
-| Reportes | Centro de reportes | 32 reportes en 7 categorías (inventario, movimientos, compras, consumos, vencimientos y calidad, análisis, control), con filtros, totales, orden por columna, Excel e impresión/PDF | A2 / SAP |
-| | Cierres | Bloqueo del periodo y deterioro por valor neto realizable con reversión | NIC 2 / Secc. 13 |
-| Maestros | Bodegas | Bodega principal, consultorios, neveras, cuarentena y sedes: código, tipo, responsable; cambio de nombre en cascada | Res. 3100/2019 (almacenamiento) |
-| | Clasificación | Árbol Línea › Grupo › Subgrupo; filtros y reportes incluyen los niveles inferiores | Clasificación tipo A2 / SAP |
-| | Lotes | Maestro de lotes con fabricación, vencimiento y estado (liberado, cuarentena, bloqueado) | Res. 1403/2007, Res. 4816/2008 |
-| | Productos | Ficha completa: clasificación, tipo de material, marca, referencia, presentación, código alterno, ubicación física, mínimo y máximo, IVA, precio, CUM, control de lote y vencimiento; ficha sanitaria (INVIMA, riesgo, GTIN, cadena de frío), unidad de compra, proveedor preferido | Res. 3100/2019, Dec. 4725/2005 |
-| | Kits por procedimiento | Insumos por procedimiento odontológico | — |
-| | Terceros | Proveedores, clientes, pacientes y empleados con NIT o documento y dígito de verificación DIAN; régimen de IVA y facturación | ET art. 771-2, Res. DIAN |
-| Sistema | Importar | Productos y saldo inicial desde Excel (.xlsx) o CSV | Migración desde A2 u otros |
-| | Usuarios y roles | Administrador, supervisor, almacenista, consultorio y consulta, con PIN | Control interno |
+La pantalla de **Inicio** muestra un ícono en relieve por sección (al pasar el mouse sube y se agranda).
 
-En todas las pantallas hay un buscador general (insumo por nombre, código, código de
-barras o lote) y los campos de producto y tercero permiten escribir para buscar
-(NIT, nombre, código).
+| Sección | Pestañas | Norma o referencia |
+| --- | --- | --- |
+| Inicio | Inicio (íconos) · Centro de control (alertas, cumplimiento, acciones rápidas) | — |
+| Compras y entradas | Entradas (factura electrónica o documento soporte, lote, vencimiento, GS1/UDI, unidad de compra) · Órdenes de compra · Reabastecimiento (punto de reorden) · Devoluciones | ET art. 771-2, NIC 2 |
+| Salidas y movimientos | Salidas y consumos (por paciente y servicio, FEFO) · Traslados · Requisiciones · Ajustes y bajas | Res. 1403/2007, ET art. 64 |
+| Kardex e inventario | Existencias (tarjeta general y por bodega) · Kardex · Vencimientos · Inventario físico (en pantalla o desde Excel) · Trazabilidad · Cadena de frío · Cierres (VNR) | ET arts. 62 y 65, C. de Co. art. 52, Res. 4816/2008 |
+| Productos y servicios | Productos e insumos (ficha completa con lotes y existencia inicial) · Servicios (CUPS, precio e insumos que consume) · Lotes · Clasificación (línea › grupo › subgrupo) · Carga desde Excel | Res. 3100/2019, Dec. 4725/2005 |
+| Terceros | NIT con dígito de verificación DIAN, tipos (proveedor, cliente, paciente, empleado) | Res. DIAN |
+| Contabilidad | Comprobantes automáticos · Libro auxiliar · Conciliación con el kardex · Cuentas (PUC, también por clasificación) · Exportación al software contable | Dec. 2650/1993, NIC 2 |
+| Reportes | 32 reportes con filtros, totales, Excel e impresión/PDF | — |
+| Configuración | General · Bodegas · Usuarios y roles | — |
+| Normatividad | Mapa de cada norma y cómo la aplica el sistema | — |
+| Portal de ayuda | Artículos "cómo hacer" con buscador · Primeros pasos | — |
 
 Los documentos no se borran: se anulan con motivo. Todo queda en la auditoría
 con el usuario que lo hizo, y cada documento se puede imprimir.

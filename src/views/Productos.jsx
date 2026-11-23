@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { Boxes, Download, Pencil, Plus, ScrollText, Snowflake } from 'lucide-react';
+import { Boxes, Download, Pencil, Plus, ScrollText, Snowflake, Trash2 } from 'lucide-react';
 import { useStore, C } from '../store.jsx';
 import { SelectBodega, SelectGrupo, SelectTercero } from '../components/Movimientos.jsx';
-import { Btn, Chip, Empty, Errores, Field, Modal, Panel, SearchBox, Tabs } from '../components/ui.jsx';
+import { Btn, Chip, Empty, Errores, Field, Modal, Nota, Panel, SearchBox, Tabs } from '../components/ui.jsx';
 import { descargar, money, num, fecha, INVIMA } from '../format.js';
 
 const VACIO = {
@@ -14,9 +14,15 @@ const VACIO = {
 const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
 export function FormProducto({ inicial, onClose }) {
-  const { db, commit, toast } = useStore();
+  const { db, state, hoy, commit, toast, nombreUsuario } = useStore();
   const [f, setF] = useState(() => Object.assign({}, VACIO, { ubicacion: db.config.ubicaciones[0] || '' }, inicial || {}));
   const [err, setErr] = useState([]);
+  const loteVacio = () => ({ lote: '', fabricado: '', vence: '', bodega: f.ubicacion || C.bodegaPrincipal(db.config), cantidad: '', costoUnit: '' });
+  const [nuevosLotes, setNuevosLotes] = useState([]);
+  const setLote = (i, k, v) => setNuevosLotes((ls) => ls.map((l, j) => (j === i ? Object.assign({}, l, { [k]: v }) : l)));
+  const conMovimientos = !!f.id && db.movimientos.some((m) => !m.anulado && m.lineas.some((l) => l.productoId === f.id));
+  const lotesExistentes = f.id ? db.lotes.filter((l) => l.productoId === f.id) : [];
+  const stockLote = (lote) => { const s = state.prods[f.id]; return s ? Object.values(s.lots).filter((x) => x.lote.toUpperCase() === String(lote).toUpperCase()).reduce((a, x) => a + x.qty, 0) : 0; };
   const set = (k) => (e) => {
     const v = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
     setF((x) => {
@@ -41,6 +47,17 @@ export function FormProducto({ inicial, onClose }) {
     if (f.ivaPct !== '' && !(Number(f.ivaPct) >= 0 && Number(f.ivaPct) <= 100)) e.push('El IVA debe estar entre 0 y 100 %.');
     if (!(Number(f.factorCompra) >= 1)) e.push('El factor de la unidad de compra debe ser 1 o mayor.');
     if (Number(f.leadTime) < 0) e.push('Los días de entrega no pueden ser negativos.');
+    const filasLote = nuevosLotes.filter((l) => l.lote || l.vence || l.cantidad);
+    filasLote.forEach((l, i) => {
+      const n = 'Lote ' + (i + 1) + ': ';
+      if (f.controlaLote !== false && !String(l.lote).trim()) e.push(n + 'escriba el número de lote.');
+      if (f.controlaVence !== false && !C.isISODate(l.vence)) e.push(n + 'indique la fecha de vencimiento.');
+      if (l.fabricado && l.vence && l.fabricado >= l.vence) e.push(n + 'la fabricación debe ser anterior al vencimiento.');
+      if (f.id && C.buscarLote(db, f.id, l.lote)) e.push(n + 'el lote ' + l.lote + ' ya existe para este producto.');
+      if (filasLote.some((x, j) => j !== i && x.lote.trim().toUpperCase() === l.lote.trim().toUpperCase() && x.bodega === l.bodega)) e.push(n + 'está repetido.');
+      if (Number(l.cantidad) > 0 && (l.costoUnit === '' || Number(l.costoUnit) < 0)) e.push(n + 'indique el costo unitario de la existencia inicial.');
+      if (Number(l.cantidad) < 0) e.push(n + 'la cantidad no puede ser negativa.');
+    });
     if (e.length) return setErr(e);
     const n = (v) => (v === '' || v === null || v === undefined ? '' : Number(v));
     const p = Object.assign({}, f, {
@@ -49,11 +66,24 @@ export function FormProducto({ inicial, onClose }) {
     });
     const nuevo = !p.id;
     if (nuevo) p.id = C.nuevoId();
+    const lotesMaestro = filasLote.map((l) => ({ id: C.nuevoId() + Math.random().toString(36).slice(2, 5), productoId: p.id, lote: l.lote.trim(), fabricado: l.fabricado, vence: l.vence, estado: 'liberado', origen: 'Ficha del producto', creado: new Date().toISOString() }));
+    const conStock = filasLote.filter((l) => Number(l.cantidad) > 0);
+    let mov = null;
+    if (conStock.length) {
+      mov = { id: C.nuevoId(), tipo: 'inicial', fecha: hoy, bodega: C.bodegaPrincipal(db.config), acta: 'Existencia inicial al crear el producto', autoriza: nombreUsuario, usuario: nombreUsuario, creado: new Date().toISOString(),
+        lineas: conStock.map((l) => ({ productoId: p.id, bodega: l.bodega, lote: l.lote.trim(), vence: l.vence, cantidad: Number(l.cantidad), costoUnit: Number(l.costoUnit) })) };
+      const proy = Object.assign({}, db, { productos: db.productos.filter((x) => x.id !== p.id).concat([p]), lotes: db.lotes.concat(lotesMaestro) });
+      const ev = C.validarMovimiento(proy, mov, hoy);
+      if (ev.length) return setErr(ev);
+    }
+    const numero = mov ? C.verNumero(db, 'inicial') : '';
     commit((d) => {
       const i = d.productos.findIndex((x) => x.id === p.id);
       if (i >= 0) d.productos[i] = p; else d.productos.push(p);
-    }, nuevo ? 'Producto creado' : 'Producto modificado', p.codigo + ' · ' + p.nombre);
-    toast(nuevo ? 'Producto creado' : 'Producto actualizado');
+      d.lotes.push(...lotesMaestro);
+      if (mov) d.movimientos.push(Object.assign({}, mov, { num: C.siguienteNumero(d, 'inicial'), orden: C.siguienteOrden(d) }));
+    }, nuevo ? 'Producto creado' : 'Producto modificado', p.codigo + ' · ' + p.nombre + (lotesMaestro.length ? ' · ' + lotesMaestro.length + ' lote(s)' : '') + (numero ? ' · ' + numero : ''));
+    toast((nuevo ? 'Producto creado' : 'Producto actualizado') + (lotesMaestro.length ? ' con ' + lotesMaestro.length + ' lote(s)' : '') + (numero ? ' y existencia inicial ' + numero : ''));
     onClose();
   };
 
@@ -119,6 +149,44 @@ export function FormProducto({ inicial, onClose }) {
         {f.categoria === 'medicamento' && <Field label="CUM" hint="Código único de medicamentos"><input className="input mono" value={f.cum} onChange={set('cum')} /></Field>}
         <Field label="Cadena de frío"><label className="check"><input type="checkbox" checked={!!f.cadenaFrio} onChange={set('cadenaFrio')} /> Requiere refrigeración</label></Field>
       </div>
+
+      <div className="section-title">Lotes y existencia inicial</div>
+      {lotesExistentes.length > 0 && (
+        <div className="tbl-wrap" style={{ marginBottom: 10 }}>
+          <table className="tbl">
+            <thead><tr><th>Lote</th><th>Fabricación</th><th>Vencimiento</th><th>Estado</th><th className="num">Existencia</th></tr></thead>
+            <tbody>{lotesExistentes.map((l) => <tr key={l.id}><td className="mono">{l.lote}</td><td>{fecha(l.fabricado)}</td><td>{fecha(l.vence)}</td><td>{C.ESTADOS_LOTE[l.estado] || l.estado}</td><td className="num">{num(stockLote(l.lote))}</td></tr>)}</tbody>
+          </table>
+        </div>
+      )}
+      {nuevosLotes.length > 0 && (
+        <div className="tbl-wrap lines">
+          <table className="tbl">
+            <thead><tr><th>Número de lote</th><th>Fabricación</th><th>Vencimiento</th>{!conMovimientos && <><th>Bodega</th><th className="num">Cantidad inicial</th><th className="num">Costo unitario</th></>}<th /></tr></thead>
+            <tbody>
+              {nuevosLotes.map((l, i) => (
+                <tr key={i}>
+                  <td><input className="input mono" value={l.lote} onChange={(e) => setLote(i, 'lote', e.target.value)} placeholder="Ej.: L2409A" style={{ minWidth: 120 }} /></td>
+                  <td><input className="input" type="date" value={l.fabricado} max={hoy} onChange={(e) => setLote(i, 'fabricado', e.target.value)} /></td>
+                  <td><input className="input" type="date" value={l.vence} onChange={(e) => setLote(i, 'vence', e.target.value)} /></td>
+                  {!conMovimientos && <>
+                    <td style={{ minWidth: 190 }}><SelectBodega value={l.bodega} onChange={(v) => setLote(i, 'bodega', v)} /></td>
+                    <td><input className="input num" type="number" min="0" value={l.cantidad} onChange={(e) => setLote(i, 'cantidad', e.target.value)} placeholder="0" style={{ width: 100 }} /></td>
+                    <td><input className="input num" type="number" min="0" value={l.costoUnit} onChange={(e) => setLote(i, 'costoUnit', e.target.value)} style={{ width: 120 }} /></td>
+                  </>}
+                  <td><Btn variant="ghost" size="sm" icon={Trash2} onClick={() => setNuevosLotes((ls) => ls.filter((_, j) => j !== i))} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <div className="toolbar" style={{ marginTop: 10 }}>
+        <Btn size="sm" icon={Plus} onClick={() => setNuevosLotes((ls) => [...ls, loteVacio()])}>Agregar lote</Btn>
+      </div>
+      <Nota>{conMovimientos
+        ? 'Este producto ya tiene movimientos: aquí puede registrar lotes nuevos (por ejemplo, antes de que llegue el pedido). Las cantidades entran por Entradas o por el inventario físico.'
+        : 'Si ya tiene este producto en bodega, escriba la cantidad y el costo de cada lote: el sistema registra la existencia inicial con fecha de hoy. Si la deja vacía, el lote queda creado y la existencia entra con la primera compra.'}</Nota>
 
       <div className="section-title">Valoración (NIC 2 / Sección 13)</div>
       <div className="form-grid">

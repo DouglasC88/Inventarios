@@ -323,3 +323,59 @@ test('los 32 reportes se generan sin error con los datos de demostración', asyn
   const total = ex.reduce((s, x) => s + x.valor, 0);
   assert.ok(Math.abs(total - C.valorInventario(ctx.state)) < 1, 'existencias por bodega cuadra con el valor del inventario');
 });
+
+test('inventario físico desde Excel: compara con el sistema y detecta lotes nuevos', () => {
+  const db = base();
+  db.config.ubicaciones = ['Principal', 'C1'];
+  add(db, ent('2026-01-10', [
+    { productoId: 'a', lote: 'L1', vence: '2027-01-01', cantidad: 10, costoUnit: 100 },
+    { productoId: 'a', lote: 'L2', vence: '2027-06-01', cantidad: 5, costoUnit: 100 }
+  ], { bodega: 'Principal' }));
+  const st = C.replay(db);
+  const plantilla = C.plantillaInventarioFisico(db, st, HOY, 'todas');
+  assert.equal(plantilla.length, 3);
+  const filas = C.parseCSV('Código;Bodega;Lote;Vencimiento;Cantidad contada\nA;Principal;l1;;8\nA;Principal;NUEVO;31/12/2027;3\nZZZ;Principal;X;;1\n');
+  const r = C.conteoDesdeFilas(db, st, filas, { bodega: 'Principal', alcance: 'bodega', hoy: HOY });
+  assert.equal(r.errores.length, 1); // código ZZZ no existe
+  const l1 = r.lineas.find((x) => x.lote === 'L1');
+  assert.equal(l1.diferencia, -2);
+  const nuevo = r.lineas.find((x) => x.lote === 'NUEVO');
+  assert.ok(nuevo.nuevo);
+  assert.equal(nuevo.vence, '2027-12-31');
+  const l2 = r.lineas.find((x) => x.lote === 'L2');
+  assert.ok(l2.noContado);
+  assert.equal(l2.diferencia, -5);
+});
+
+test('saldo inicial de un producto nuevo se permite aunque haya otros movimientos', () => {
+  const db = base();
+  db.productos.push({ id: 'b', codigo: 'B', nombre: 'Nuevo', categoria: 'insumo', unidad: 'u' });
+  add(db, ent('2026-01-10', [{ productoId: 'a', lote: 'L1', vence: '2027-01-01', cantidad: 10, costoUnit: 100 }]));
+  const ini = { id: 'i', tipo: 'inicial', fecha: '2026-11-20', acta: 'Creación', lineas: [{ productoId: 'b', lote: 'B1', vence: '2027-01-01', cantidad: 4, costoUnit: 10 }] };
+  assert.deepEqual(C.validarMovimiento(db, ini, HOY), []);
+  const iniA = Object.assign({}, ini, { lineas: [{ productoId: 'a', lote: 'X', vence: '2027-01-01', cantidad: 1, costoUnit: 1 }] });
+  assert.ok(C.validarMovimiento(db, iniA, HOY).some((e) => e.includes('inventario físico')));
+});
+
+test('contabilidad: comprobantes cuadrados y cuenta de inventario igual al kardex', () => {
+  const db = crearDemo(HOY);
+  const st = C.replay(db);
+  const cps = C.comprobantesContables(db, st);
+  assert.ok(cps.length > 5);
+  cps.forEach((cp) => assert.ok(cp.cuadra, cp.num + ' no cuadra'));
+  const saldos = C.saldosContables(cps);
+  const inv = saldos.find((x) => x.cuenta === '1455');
+  const det = saldos.find((x) => x.cuenta === '1499');
+  assert.ok(Math.abs(inv.saldo - C.valorInventario(st)) < 1, 'saldo 1455 = valor del kardex');
+  assert.ok(!det || det.saldo <= 0);
+  const compra = cps.find((cp) => cp.tipo === 'Entrada');
+  assert.ok(compra.lineas.some((l) => l.cuenta === '2205' && l.credito > 0 && l.tercero));
+});
+
+test('cuenta contable propia por clasificación', () => {
+  const db = base();
+  db.grupos = [{ id: 'l1', nombre: 'Medicamentos', cuentas: { inventario: '143501' } }, { id: 'g1', nombre: 'Anestésicos', parentId: 'l1' }];
+  db.productos[0].grupoId = 'g1';
+  assert.equal(C.cuentaDe(db, 'inventario', db.productos[0]).cuenta, '143501');
+  assert.equal(C.cuentaDe(db, 'proveedores', db.productos[0]).cuenta, '2205');
+});
