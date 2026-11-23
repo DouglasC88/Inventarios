@@ -568,3 +568,15 @@ test('carga de productos con datos de la ficha', () => {
   assert.equal(i.datos.implantable, true); assert.equal(i.datos.tarifaIva, '5');
   assert.ok(r.errores.some((x) => /GTIN/.test(x)));
 });
+
+test('ubicación del tercero: códigos DANE y países', () => {
+  const db = C.dbVacia();
+  assert.ok(C.PAISES.length > 240 && C.PAISES.some(([c, n]) => c === 'VE' && n === 'Venezuela'));
+  const t = { tipoDoc: 'NIT', nit: '900123456', persona: 'juridica', razonSocial: 'X', tipos: ['proveedor'], pais: 'Colombia', paisCodigo: 'CO', departamento: 'Antioquia', departamentoCodigo: '05', ciudad: 'Cali', ciudadCodigo: '76001' };
+  assert.ok(C.validarTercero(db, t).some((x) => /no pertenece/.test(x)));
+  Object.assign(t, { ciudad: 'Envigado', ciudadCodigo: '05266' });
+  assert.deepEqual(C.validarTercero(db, t), []);
+  assert.deepEqual(C.validarTercero(db, Object.assign({}, t, { pais: 'Venezuela', paisCodigo: 'VE', departamento: '', departamentoCodigo: '', ciudad: 'Maracaibo', ciudadCodigo: '' })), []);
+  assert.ok(C.validarTercero(db, Object.assign({}, t, { pais: 'Venezuela', paisCodigo: 'VE', ciudad: '', ciudadCodigo: '' })).some((x) => /ciudad/.test(x)));
+  assert.equal(C.normalizarTercero({ nombre: 'Y', departamento: 'antioquia' }).departamentoCodigo, '05');
+});

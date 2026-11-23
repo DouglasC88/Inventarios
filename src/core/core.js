@@ -12,6 +12,7 @@
  *  - Toda compra con factura electrónica o documento soporte (ET art. 771-2).
  *  - Existencias por bodega y lote; el costo es único por producto.
  */
+import { PAISES } from './paises.js';
 
 const EPS = 1e-9;
 const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
@@ -636,7 +637,16 @@ const TIPOS_TRABAJADOR = { '01': 'Dependiente', '02': 'Servicio doméstico', '04
 const SUBTIPOS_TRABAJADOR = { '00': 'No aplica', '01': 'Dependiente pensionado por vejez activo' };
 const TIPOS_CONTRATO = { '1': 'Término fijo', '2': 'Término indefinido', '3': 'Obra o labor', '4': 'Aprendizaje', '5': 'Prácticas o pasantías' };
 const PERIODICIDADES = { '5': 'Mensual', '4': 'Quincenal', '2': 'Decenal', '3': 'Catorcenal', '1': 'Semanal', '6': 'Otra' };
-const DEPARTAMENTOS = ['Amazonas', 'Antioquia', 'Arauca', 'Atlántico', 'Bogotá D.C.', 'Bolívar', 'Boyacá', 'Caldas', 'Caquetá', 'Casanare', 'Cauca', 'Cesar', 'Chocó', 'Córdoba', 'Cundinamarca', 'Guainía', 'Guaviare', 'Huila', 'La Guajira', 'Magdalena', 'Meta', 'Nariño', 'Norte de Santander', 'Putumayo', 'Quindío', 'Risaralda', 'San Andrés y Providencia', 'Santander', 'Sucre', 'Tolima', 'Valle del Cauca', 'Vaupés', 'Vichada'];
+/** Departamentos de Colombia con su código DANE (DIVIPOLA). */
+const DEPARTAMENTOS_CO = {
+  '05': 'Antioquia', '08': 'Atlántico', '11': 'Bogotá D.C.', '13': 'Bolívar', '15': 'Boyacá', '17': 'Caldas', '18': 'Caquetá', '19': 'Cauca', '20': 'Cesar',
+  '23': 'Córdoba', '25': 'Cundinamarca', '27': 'Chocó', '41': 'Huila', '44': 'La Guajira', '47': 'Magdalena', '50': 'Meta', '52': 'Nariño', '54': 'Norte de Santander',
+  '63': 'Quindío', '66': 'Risaralda', '68': 'Santander', '70': 'Sucre', '73': 'Tolima', '76': 'Valle del Cauca', '81': 'Arauca', '85': 'Casanare', '86': 'Putumayo',
+  '88': 'San Andrés y Providencia', '91': 'Amazonas', '94': 'Guainía', '95': 'Guaviare', '97': 'Vaupés', '99': 'Vichada'
+};
+const DEPARTAMENTOS = Object.values(DEPARTAMENTOS_CO).sort((a, b) => a.localeCompare(b, 'es'));
+/** ¿La ubicación del tercero es en Colombia? */
+function enColombia(t) { return t.paisCodigo ? t.paisCodigo === 'CO' : !t.pais || /^colombia$/i.test(String(t.pais).trim()); }
 
 /** Nombre del tercero: nombres y apellidos (persona natural) o razón social. */
 function nombreTercero(t) {
@@ -677,7 +687,12 @@ function validarTercero(db, t) {
   if (t.correo && !correo.test(t.correo)) e.push('El correo no es válido.');
   if (t.correoFE && !correo.test(t.correoFE)) e.push('El correo de factura electrónica no es válido.');
   if (t.sitioWeb && /\s/.test(t.sitioWeb)) e.push('El sitio web no es válido.');
-  if (!t.extranjero && (!String(t.departamento || '').trim() || !String(t.ciudad || '').trim())) e.push('Indique departamento y ciudad.');
+  if (enColombia(t)) {
+    if (!String(t.departamento || '').trim() || !String(t.ciudad || '').trim()) e.push('Indique departamento y ciudad.');
+    if (t.departamentoCodigo && !DEPARTAMENTOS_CO[t.departamentoCodigo]) e.push('El código de departamento ' + t.departamentoCodigo + ' no existe.');
+    if (t.ciudadCodigo && !/^\d{5}$/.test(t.ciudadCodigo)) e.push('El código DANE del municipio debe tener 5 dígitos.');
+    else if (t.ciudadCodigo && t.departamentoCodigo && t.ciudadCodigo.slice(0, 2) !== t.departamentoCodigo) e.push('El municipio no pertenece al departamento elegido.');
+  } else if (!String(t.ciudad || '').trim()) e.push('Indique la ciudad.');
   ['retefuentePct', 'reteicaPct'].forEach((k) => { if (t[k] !== '' && t[k] !== undefined && t[k] !== null && !(Number(t[k]) >= 0 && Number(t[k]) <= 100)) e.push('El porcentaje de ' + (k === 'retefuentePct' ? 'retención en la fuente' : 'reteICA') + ' debe estar entre 0 y 100.'); });
   if (t.conBanco) {
     if (!String(t.banco || '').trim()) e.push('Escriba el banco.');
@@ -744,6 +759,8 @@ function normalizarTercero(t) {
   if (x.regimen) x.responsableIva = !['noResponsable', 'noContribuyente'].includes(x.regimen);
   else x.regimen = x.responsableIva === false ? 'noResponsable' : 'responsable';
   if (!x.pais) x.pais = 'Colombia';
+  if (!x.paisCodigo && /^colombia$/i.test(String(x.pais).trim())) x.paisCodigo = 'CO';
+  if (x.paisCodigo === 'CO' && !x.departamentoCodigo && x.departamento) { const k = Object.keys(DEPARTAMENTOS_CO).find((c) => norm(DEPARTAMENTOS_CO[c]) === norm(x.departamento)); if (k) x.departamentoCodigo = k; }
   const nom = nombreTercero(x);
   if (nom) x.nombre = nom;
   if (x.persona !== 'natural' && !x.razonSocial) x.razonSocial = x.nombre || '';
@@ -1975,7 +1992,7 @@ export {
   balanceComprobacion, estadoCosto, COLUMNAS_INTERFAZ, archivoInterfaz, interpretarPlanCuentas, interpretarTerceros,
   NIVELES_GRUPO, TIPOS_MATERIAL, nivelGrupo, rutaGrupo, gruposDescendientes, arbolGrupos, lineasMovimiento,
   UNIDADES, TARIFAS_IVA, pctIva, FORMAS_FARMACEUTICAS, VIAS_ADMIN, ESTERILIZACION, POLITICAS_REPOSICION, gtinValido, validarProducto, precioPactado, validarOrdenCompra,
-  TIPOS_DOC, TIPOS_TERCERO, SEXOS, REGIMENES, RESPONSABILIDADES, MEDIOS_PAGO, PLAZOS_PAGO, TIPOS_CUENTA_BANCO, TIPOS_TRABAJADOR, SUBTIPOS_TRABAJADOR, TIPOS_CONTRATO, PERIODICIDADES, DEPARTAMENTOS, nombreTercero, partirNombre, validarTercero, impuestosSugeridos, calcularDV, documentoTercero, normalizarTercero,
+  TIPOS_DOC, TIPOS_TERCERO, SEXOS, REGIMENES, RESPONSABILIDADES, MEDIOS_PAGO, PLAZOS_PAGO, TIPOS_CUENTA_BANCO, TIPOS_TRABAJADOR, SUBTIPOS_TRABAJADOR, TIPOS_CONTRATO, PERIODICIDADES, DEPARTAMENTOS, DEPARTAMENTOS_CO, PAISES, enColombia, nombreTercero, partirNombre, validarTercero, impuestosSugeridos, calcularDV, documentoTercero, normalizarTercero,
   TIPOS_BODEGA, sincronizarBodegas, renombrarBodega, bodegaEnUso,
   ESTADOS_LOTE, claveLote, buscarLote, asegurarLotes,
   r2, daysBetween, addDays, todayISO, yearOf, isISODate,

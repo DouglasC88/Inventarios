@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Contact, FileSpreadsheet, Pencil, Plus } from 'lucide-react';
 import { useStore, C } from '../store.jsx';
 import { Btn, Chip, Empty, Errores, Field, Modal, Panel, SearchBox, Tabs } from '../components/ui.jsx';
-import Combo from '../components/Combo.jsx';
+import Ubicacion from '../components/Ubicacion.jsx';
 import { SelectCuenta } from './Contabilidad.jsx';
 import { money } from '../format.js';
 
@@ -12,7 +12,7 @@ export function FormTercero({ inicial, onClose, onGuardado, tipoInicial }) {
   const [f, setF] = useState(() => {
     const base = {
       tipoDoc: 'NIT', nit: '', dv: '', persona: 'juridica', nombre: '', razonSocial: '', nombreComercial: '', primerNombre: '', segundoNombre: '', primerApellido: '', segundoApellido: '', sexo: '',
-      tipos: [tipoInicial || 'proveedor'], extranjero: false, contacto: '', telefono: '', celular: '', correo: '', pais: 'Colombia', departamento: '', ciudad: '', direccion: '', sitioWeb: '', sucursal: '',
+      tipos: [tipoInicial || 'proveedor'], extranjero: false, contacto: '', telefono: '', celular: '', correo: '', pais: 'Colombia', paisCodigo: 'CO', departamento: '', departamentoCodigo: '', ciudad: '', ciudadCodigo: '', direccion: '', sitioWeb: '', sucursal: '',
       regimen: 'responsable', responsabilidades: [], actividad: '', obligadoFacturar: true, correoFE: '', retefuentePct: '', reteicaPct: '',
       plazoPago: 30, medioPago: 'transferencia', conBanco: false, banco: '', tipoCuenta: '', numeroCuenta: '', cuentaCredito: '', cuentaDebito: '',
       empleado: { tipoTrabajador: '01', subtipo: '00', tipoContrato: '', periodicidad: '5', salario: '', fechaInicio: '', fechaFin: '', cargo: '', altoRiesgo: false, salarioIntegral: false, sinAuxilioTransporte: false },
@@ -109,13 +109,7 @@ export function FormTercero({ inicial, onClose, onGuardado, tipoInicial }) {
         <Field label="Celular"><input className="input" inputMode="tel" value={f.celular} onChange={set('celular')} /></Field>
         <Field label="Teléfono"><input className="input" inputMode="tel" value={f.telefono} onChange={set('telefono')} /></Field>
         {natural && <Field label="Persona de contacto"><input className="input" value={f.contacto} onChange={set('contacto')} /></Field>}
-        <Field label="País"><input className="input" value={f.pais} onChange={set('pais')} /></Field>
-        <Field label={'Departamento' + (f.extranjero ? '' : ' *')}>
-          {!f.extranjero && /^colombia$/i.test(String(f.pais).trim())
-            ? <Combo value={f.departamento} onChange={(v) => upd({ departamento: v })} options={C.DEPARTAMENTOS.map((d) => ({ value: d, label: d }))} placeholder="Escriba el departamento…" />
-            : <input className="input" value={f.departamento} onChange={set('departamento')} />}
-        </Field>
-        <Field label={'Ciudad o municipio' + (f.extranjero ? '' : ' *')}><input className="input" value={f.ciudad} onChange={set('ciudad')} /></Field>
+        <Ubicacion v={f} onChange={upd} />
         <Field label="Dirección"><input className="input" value={f.direccion} onChange={set('direccion')} /></Field>
         <Field label="Sitio web"><input className="input" value={f.sitioWeb} onChange={set('sitioWeb')} placeholder="www.ejemplo.co" /></Field>
         <Field label="Sede o sucursal" hint="Sede de la empresa con la que se relaciona">
@@ -219,7 +213,7 @@ export default function Terceros({ arg }) {
                   <td className="mono">{C.documentoTercero(t)}</td>
                   <td className="strong">{t.nombre}</td>
                   <td><div className="stockbod">{t.tipos.map((x) => <span key={x}>{C.TIPOS_TERCERO[x]}</span>)}</div></td>
-                  <td>{t.ciudad || '—'}{t.departamento && t.departamento !== t.ciudad ? <div className="small muted">{t.departamento}</div> : null}</td>
+                  <td>{t.ciudad || '—'}<div className="small muted">{[t.departamento !== t.ciudad ? t.departamento : '', C.enColombia(t) ? '' : t.pais].filter(Boolean).join(' · ')}</div></td>
                   <td>{t.contacto}<div className="small muted">{[t.celular, t.telefono, t.correo].filter(Boolean).join(' · ')}</div></td>
                   <td><div className="small">{C.REGIMENES[t.regimen]}</div>{t.tipos.includes('proveedor') ? (t.obligadoFacturar ? <Chip tone="cyan">Factura electrónica</Chip> : <Chip tone="violet">Documento soporte</Chip>) : null}{t.plazoPago ? <div className="small muted">Plazo {t.plazoPago} días</div> : null}</td>
                   <td className="num">{money(compras(t.id))}</td>

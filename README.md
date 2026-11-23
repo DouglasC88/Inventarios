@@ -53,6 +53,15 @@ npm run build   # compilación para producción (carpeta dist)
 
 La conciliación compara la 1455 con el kardex y la puente con lo recibido sin factura.
 
+## Datos geográficos
+
+País, departamento o estado y ciudad se eligen con buscador (se escribe y filtra; en listas grandes desde 3 letras).
+
+- **Colombia:** 33 departamentos y 1.121 municipios de la DIVIPOLA del DANE, con su código (lo piden la factura electrónica y los RIPS). Fuente: paquete npm `divipola` (MIT).
+- **Resto del mundo:** 247 países (nombres en español) con sus estados y ciudades de [GeoNames](https://www.geonames.org), licencia [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), tomados del paquete npm `cities.json`.
+
+Los archivos están en `public/geo/` (uno por país, se descargan solo al elegir el país). Para regenerarlos: `node scripts/geo.mjs <divipola/index.js> <cities.json/admin1.json> <cities.json/cities.json>`.
+
 ## Arquitectura
 
 - `src/core/core.js`: motor de inventario sin interfaz (kardex, costeo, validaciones, alertas, cierres, GS1). Probado en `tests/core.test.js`.

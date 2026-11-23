@@ -8,19 +8,25 @@ const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toL
  * Campo de búsqueda con lista: se puede escribir (código, nombre, NIT…) o desplegar.
  * options: [{ value, label, sub, search }]
  */
-export default function Combo({ value, onChange, options, placeholder = 'Escriba para buscar…', autoFocus, onCreate, createLabel = 'Crear nuevo', disabled, width }) {
+export default function Combo({ value, onChange, options, placeholder = 'Escriba para buscar…', autoFocus, onCreate, createLabel = 'Crear nuevo', disabled, width, minimo = 0, textoLibre }) {
   const ref = useRef(null);
   const listRef = useRef(null);
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
   const [act, setAct] = useState(0);
   const [pos, setPos] = useState(null);
-  const sel = options.find((o) => o.value === value) || null;
+  // textoLibre: valor escrito a mano que no está en la lista (se muestra tal cual).
+  const sel = options.find((o) => o.value === value) || (textoLibre ? { value, label: textoLibre } : null);
 
   const palabras = norm(q).split(/\s+/).filter(Boolean);
-  const filtradas = (palabras.length
+  // En listas grandes (ciudades del mundo) se busca desde "minimo" letras.
+  const faltan = minimo > 0 && norm(q).replace(/\s/g, '').length < minimo;
+  const coinciden = faltan ? [] : palabras.length
     ? options.filter((o) => { const t = norm(o.label + ' ' + (o.sub || '') + ' ' + (o.search || '')); return palabras.every((w) => t.includes(w) || t.replace(/[.\-\s]/g, '').includes(w.replace(/[.\-\s]/g, ''))); })
-    : options).slice(0, 80);
+    : options;
+  // Primero las que empiezan por lo escrito.
+  const nq = norm(q).trim();
+  const filtradas = (nq ? [...coinciden.filter((o) => norm(o.label).startsWith(nq)), ...coinciden.filter((o) => !norm(o.label).startsWith(nq))] : coinciden).slice(0, 80);
 
   const medir = () => {
     if (!ref.current) return;
@@ -77,7 +83,8 @@ export default function Combo({ value, onChange, options, placeholder = 'Escriba
               {o.sub && <div className="s">{o.sub}</div>}
             </div>
           ))}
-          {!filtradas.length && <div className="combo-empty">Sin resultados para "{q}"</div>}
+          {faltan && <div className="combo-empty">Escriba al menos {minimo} letras para buscar entre {options.length.toLocaleString('es-CO')} opciones</div>}
+          {!faltan && !filtradas.length && <div className="combo-empty">Sin resultados para "{q}"</div>}
           {onCreate && (
             <div className="combo-opt create" onMouseDown={(e) => { e.preventDefault(); setOpen(false); onCreate(q); setQ(''); }}>
               <Plus size={14} /> {createLabel}{q ? ': "' + q + '"' : ''}

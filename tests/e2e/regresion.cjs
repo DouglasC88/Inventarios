@@ -156,13 +156,23 @@ const { chromium } = require('playwright');
   await fld('Número de documento *').fill('1018222333');
   await fld('Primer nombre *').fill('Sofía'); await fld('Primer apellido *').fill('Mejía'); await fld('Segundo apellido').fill('Castro');
   await p.click('.modal label.check:has-text("Empleado")'); await p.click('.modal label.check:has-text("Proveedor")');
-  await combo(p.locator('.modal .field:has(label:text-is("Departamento *")) .combo input'), 'Antio');
-  await fld('Ciudad o municipio *').fill('Envigado'); await fld('Celular').fill('3015550000');
+  await combo(p.locator('.modal .field:has(label:text-is("Departamento *")) .combo input'), 'Antio'); await p.waitForTimeout(300);
+  await combo(p.locator('.modal .field:has(label:text-is("Ciudad o municipio *")) .combo input'), 'Envig');
+  console.log('municipio DANE'.padEnd(28), '|', await p.locator('.modal .field:has(label:text-is("Ciudad o municipio *")) .hint').textContent());
+  await fld('Celular').fill('3015550000');
   await p.click('.modal label.check:has-text("Con información bancaria")'); await p.waitForTimeout(100);
   await fld('Banco *').fill('Banco de prueba'); await p.locator('.modal .field:has(label:text-is("Tipo de cuenta *")) select').selectOption('ahorros'); await fld('Número de cuenta *').fill('4455667788');
   await p.locator('.modal .field:has(label:text-is("Tipo de contrato *")) select').selectOption('2');
   await fld('Salario *').fill('2500000'); await fld('Fecha de inicio del contrato *').fill('2026-03-01');
   await p.click('.modal-foot >> text=Guardar'); await res('tercero natural empleado');
+  // Tercero del exterior: país, estado y ciudad desde la base mundial
+  await p.click('text=Nuevo tercero'); await p.waitForTimeout(300);
+  await fld('NIT (sin dígito de verificación) *').fill('900555444'); await fld('Razón social *').fill('Proveedor de Venezuela C.A.');
+  await combo(p.locator('.modal .field:has(label:text-is("País")) .combo input'), 'vene'); await p.waitForTimeout(500);
+  await combo(p.locator('.modal .field:has(label:text-is("Estado o provincia")) .combo input'), 'Zulia'); await p.waitForTimeout(200);
+  await combo(p.locator('.modal .field:has(label:text-is("Ciudad *")) .combo input'), 'Maracaibo');
+  await p.click('.modal-foot >> text=Guardar'); await res('tercero de Venezuela');
+  console.log('ubicación exterior'.padEnd(28), '|', await p.locator('tbody tr', { hasText: 'Proveedor de Venezuela' }).locator('td').nth(3).textContent());
   await p.locator('.search input').first().fill('1018222333').catch(() => {});
   console.log('tercero en lista'.padEnd(28), '|', await p.locator('tbody tr', { hasText: 'Sofía Mejía Castro' }).count());
   // Contabilidad: factura de proveedor, comprobante manual, plan, cargas masivas, interfaz

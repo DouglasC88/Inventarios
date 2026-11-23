@@ -11,7 +11,7 @@ const ARTICULOS = [
     'Menú Terceros › "Nuevo tercero". Elija persona natural (nombres y apellidos por separado, sexo) o persona jurídica (razón social y nombre comercial).',
     'Tipo y número de documento. Para NIT escriba el número sin el dígito de verificación: el sistema lo calcula.',
     'Marque qué es: proveedor, cliente, paciente, empleado, asesor, laboratorio o extranjero (puede ser varios).',
-    'Contacto y ubicación: correo, celular, teléfono, país, departamento, ciudad, dirección, sitio web y sede.',
+    'Contacto y ubicación: correo, celular y teléfono. País, departamento y ciudad se buscan escribiendo: en Colombia salen los 1.121 municipios con su código DANE; en otros países, sus estados y ciudades.',
     'Tributario: régimen, responsabilidades del RUT (gran contribuyente, autorretenedor…), actividad CIIU, factura electrónica y retenciones propias. Las facturas de ese proveedor las toman solas.',
     'Pagos: plazo (calcula el vencimiento de sus facturas), medio de pago, cuenta bancaria y cuentas contables propias.',
     'Si es empleado: cargo, tipo de trabajador, contrato, periodicidad, salario y fecha de inicio (códigos de la nómina electrónica).',
