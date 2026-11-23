@@ -23,7 +23,8 @@ Aplicación JavaScript (React + Vite) con interfaz futurista tipo HUD en blanco 
 | | Conteos físicos | Anual y cíclico, por bodega o categoría; las diferencias generan el ajuste | C. de Co. art. 52 |
 | Compras | Órdenes de compra | Pedido, recepción parcial o total, cierre de saldo, impresión | Flujo tipo SAP |
 | | Reabastecimiento | Punto de reorden por consumo real, stock de seguridad y pedido sugerido por proveedor | MRP tipo SAP |
-| Control | Kardex | Kardex permanente por promedio ponderado o PEPS (sin UEPS), existencias por bodega | ET arts. 62 y 65, NIC 2 |
+| Control | Existencias | Tarjeta General (todas las bodegas) y una tarjeta por bodega; insumos con stock, lotes, vencimientos y valor; buscador por nombre, código o lote | — |
+| | Kardex | Kardex permanente por promedio ponderado o PEPS (sin UEPS), existencias por bodega | ET arts. 62 y 65, NIC 2 |
 | | Lotes y vencimientos | Semáforo por bodega y baja de vencidos | Res. 1403/2007 |
 | | Trazabilidad | Proveedor, factura, bodega y paciente de cada lote | Res. 4816/2008 |
 | | Cadena de frío | Registro de temperaturas y alertas fuera de rango | Res. 3100/2019 |
@@ -34,9 +35,13 @@ Aplicación JavaScript (React + Vite) con interfaz futurista tipo HUD en blanco 
 | | Lotes | Maestro de lotes con fabricación, vencimiento y estado (liberado, cuarentena, bloqueado) | Res. 1403/2007, Res. 4816/2008 |
 | | Productos | Ficha sanitaria (INVIMA, riesgo, GTIN, cadena de frío), unidad de compra, proveedor preferido | Res. 3100/2019, Dec. 4725/2005 |
 | | Kits por procedimiento | Insumos por procedimiento odontológico | — |
-| | Proveedores | Factura electrónica o documento soporte | ET art. 771-2 |
+| | Terceros | Proveedores, clientes, pacientes y empleados con NIT o documento y dígito de verificación DIAN; régimen de IVA y facturación | ET art. 771-2, Res. DIAN |
 | Sistema | Importar | Productos y saldo inicial desde Excel (.xlsx) o CSV | Migración desde A2 u otros |
 | | Usuarios y roles | Administrador, supervisor, almacenista, consultorio y consulta, con PIN | Control interno |
+
+En todas las pantallas hay un buscador general (insumo por nombre, código, código de
+barras o lote) y los campos de producto y tercero permiten escribir para buscar
+(NIT, nombre, código).
 
 Los documentos no se borran: se anulan con motivo. Todo queda en la auditoría
 con el usuario que lo hizo, y cada documento se puede imprimir.
@@ -50,6 +55,7 @@ Usuarios de la demostración: `admin` / 1234, `supervisor` / 1111,
 npm install
 npm run dev     # servidor local
 npm test        # pruebas del motor de inventario
+node tests/e2e/regresion.cjs   # prueba en navegador (con vite preview en el puerto 4173)
 npm run build   # compilación para producción (carpeta dist)
 ```
 

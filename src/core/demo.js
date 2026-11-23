@@ -39,10 +39,13 @@ export function crearDemo(hoy) {
     id: 'u-' + usuario, usuario, nombre, rol, bodega, activo: true, pinHash: C.hashPin(usuario, pin)
   }));
 
+  const T = (id, nit, nombre, tipos, extra) => C.normalizarTercero(Object.assign({ id, tipoDoc: 'NIT', nit, dv: C.calcularDV(nit), nombre, tipos, persona: 'juridica', contacto: '', telefono: '', correo: '', direccion: '', ciudad: 'Bogotá D.C.', responsableIva: true, obligadoFacturar: true }, extra || {}));
   db.proveedores = [
-    { id: 'pv1', nit: '900.123.456-7', nombre: 'Dental Andina S.A.S.', contacto: 'Laura Gómez', telefono: '601 555 0101', correo: 'ventas@ejemplo.co', obligadoFacturar: true },
-    { id: 'pv2', nit: '830.987.654-1', nombre: 'Distribuciones OdontoSur Ltda.', contacto: 'Carlos Ruiz', telefono: '604 555 0202', correo: 'pedidos@ejemplo.co', obligadoFacturar: true },
-    { id: 'pv3', nit: '79.555.222', nombre: 'Proveedor persona natural (no obligado a facturar)', contacto: '', telefono: '', correo: '', obligadoFacturar: false }
+    T('pv1', '900123456', 'Dental Andina S.A.S.', ['proveedor'], { contacto: 'Laura Gómez', telefono: '601 555 0101', correo: 'ventas@ejemplo.co', direccion: 'Cra. 15 # 80-20' }),
+    T('pv2', '830987654', 'Distribuciones OdontoSur Ltda.', ['proveedor'], { contacto: 'Carlos Ruiz', telefono: '604 555 0202', correo: 'pedidos@ejemplo.co', ciudad: 'Medellín' }),
+    T('pv3', '79555222', 'Proveedor persona natural (no obligado a facturar)', ['proveedor'], { tipoDoc: 'CC', dv: '', persona: 'natural', responsableIva: false, obligadoFacturar: false }),
+    T('cl1', '901456789', 'Laboratorio Dental Aliado S.A.S.', ['cliente'], { contacto: 'Andrea Ríos', ciudad: 'Bogotá D.C.' }),
+    T('pa1', '1020304050', 'Paciente de ejemplo', ['paciente'], { tipoDoc: 'CC', dv: '', persona: 'natural', responsableIva: false, obligadoFacturar: false })
   ];
 
   const P = (id, codigo, nombre, categoria, riesgo, unidad, stockMin, extra) => Object.assign({

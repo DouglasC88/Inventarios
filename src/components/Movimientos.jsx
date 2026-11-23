@@ -3,6 +3,7 @@ import { Ban, Eye, FileText, Printer } from 'lucide-react';
 import { useStore, C } from '../store.jsx';
 import { Btn, Chip, Empty, Errores, Field, Modal, SearchBox } from './ui.jsx';
 import { imprimirMovimiento } from './imprimir.js';
+import Combo from './Combo.jsx';
 import { money, money2, num, fecha, fechaHora, TONO_MOV } from '../format.js';
 
 /** Valida y registra un movimiento. Devuelve la lista de errores (vacía si se registró). */
@@ -53,7 +54,7 @@ export function encabezadoMov(db, mov, costos) {
   const kv = [['Documento', mov.num], ['Fecha', fecha(mov.fecha)], ['Tipo', C.TIPOS_MOV[mov.tipo]], ['Valor', money(costos ? costos.total : 0)]];
   if (mov.tipo === 'traslado') kv.push(['Origen', C.bodegaDe(mov, db.config)], ['Destino', mov.bodegaDestino]);
   else kv.push(['Bodega', C.bodegaDe(mov, db.config)]);
-  if (mov.tipo === 'entrada') kv.push(['Proveedor', prov ? prov.nombre : '—'], ['NIT', prov ? prov.nit : '—'], ['Soporte', mov.docTipo + ' ' + mov.docNum], ['Costos adicionales', money(mov.costosAdic || 0)]);
+  if (mov.tipo === 'entrada') kv.push(['Proveedor', prov ? prov.nombre : '—'], ['Documento', prov ? C.documentoTercero(prov) : '—'], ['Soporte', mov.docTipo + ' ' + mov.docNum], ['Costos adicionales', money(mov.costosAdic || 0)]);
   if (mov.ordenNum) kv.push(['Orden de compra', mov.ordenNum]);
   if (mov.tipo === 'devolucion') kv.push(['Proveedor', prov ? prov.nombre : '—'], ['Causa', C.CAUSAS_DEVOLUCION[mov.causa]], ['Documento', mov.docNum]);
   if (mov.tipo === 'salida') kv.push(['Destino', (mov.destinoTipo || '') + ' ' + (mov.destino || '')], ['Procedimiento', mov.procedimiento || '—'], ['Responsable', mov.responsable || '—']);
@@ -146,7 +147,7 @@ export function MovTabla({ tipos, vacio, filtro }) {
   const detalle = (m) => {
     const prov = db.proveedores.find((p) => p.id === m.proveedorId);
     const b = C.bodegaDe(m, db.config);
-    if (m.tipo === 'entrada') return <>{prov ? prov.nombre : '—'}<div className="small muted mono">{m.docTipo} {m.docNum}{m.ordenNum ? ' · ' + m.ordenNum : ''} · {b}</div></>;
+    if (m.tipo === 'entrada') return <>{prov ? prov.nombre : '—'}<div className="small muted mono">{prov ? C.documentoTercero(prov) + ' · ' : ''}{m.docTipo} {m.docNum}{m.ordenNum ? ' · ' + m.ordenNum : ''} · {b}</div></>;
     if (m.tipo === 'inicial') return <>Saldo inicial<div className="small muted">{m.acta} · {b}</div></>;
     if (m.tipo === 'salida') return <>{m.destinoTipo}: {m.destino}{m.procedimiento ? ' · ' + m.procedimiento : ''}<div className="small muted">{b} · {m.responsable}</div></>;
     if (m.tipo === 'traslado') return <>{b} → {m.bodegaDestino}<div className="small muted">{m.requisicionNum || m.responsable || ''}</div></>;
@@ -182,15 +183,30 @@ export function MovTabla({ tipos, vacio, filtro }) {
   );
 }
 
-export function SelectProducto({ value, onChange, autoFocus }) {
+export function SelectProducto({ value, onChange, autoFocus, placeholder }) {
+  const { db, state } = useStore();
+  const grupo = (id) => (db.grupos.find((g) => g.id === id) || {}).nombre || '';
+  const options = db.productos.filter((p) => p.activo !== false).slice().sort((a, b) => a.nombre.localeCompare(b.nombre)).map((p) => ({
+    value: p.id,
+    label: p.codigo + ' · ' + p.nombre,
+    sub: [grupo(p.grupoId), 'Existencia ' + C.r2(state.prods[p.id] ? state.prods[p.id].qty : 0) + ' ' + (p.unidad || '')].filter(Boolean).join(' · '),
+    search: [p.gtin, p.invima, p.fabricante].join(' ')
+  }));
+  return <Combo value={value} onChange={onChange} options={options} autoFocus={autoFocus} placeholder={placeholder || 'Escriba código, nombre o código de barras…'} />;
+}
+
+/** Buscador de terceros por NIT, documento o nombre. tipo: filtra por proveedor, cliente, paciente… */
+export function SelectTercero({ value, onChange, tipo, autoFocus, onCreate, disabled }) {
   const { db } = useStore();
-  const lista = db.productos.filter((p) => p.activo !== false).slice().sort((a, b) => a.nombre.localeCompare(b.nombre));
-  return (
-    <select className="select input" value={value} onChange={(e) => onChange(e.target.value)} autoFocus={autoFocus}>
-      <option value="">Seleccione…</option>
-      {lista.map((p) => <option key={p.id} value={p.id}>{p.codigo} · {p.nombre}</option>)}
-    </select>
-  );
+  const options = db.proveedores.filter((t) => t.activo !== false && (!tipo || (t.tipos || ['proveedor']).includes(tipo)))
+    .slice().sort((a, b) => a.nombre.localeCompare(b.nombre)).map((t) => ({
+      value: t.id,
+      label: t.nombre,
+      sub: C.documentoTercero(t) + (t.ciudad ? ' · ' + t.ciudad : ''),
+      search: String(t.nit || '') + ' ' + (t.contacto || '')
+    }));
+  return <Combo value={value} onChange={onChange} options={options} autoFocus={autoFocus} disabled={disabled}
+    placeholder="Escriba el NIT o el nombre del tercero…" onCreate={onCreate} createLabel="Crear tercero" />;
 }
 
 /** Tabla de lotes asignados por FEFO. */

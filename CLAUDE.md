@@ -37,4 +37,6 @@ Al terminar cada avance funcional, desplegar de inmediato:
 ```bash
 npm test        # pruebas del motor
 npm run build   # debe compilar sin errores antes de publicar
+npx vite preview --port 4173 &  # y luego:
+node tests/e2e/regresion.cjs    # regresión en navegador (actualizarla si cambian pantallas)
 ```

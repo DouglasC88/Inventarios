@@ -57,7 +57,7 @@ export default function Guia() {
     ['Datos de la empresa y método de valoración', db.config.empresa.nombre && db.config.empresa.nombre !== 'Mi empresa', 'config', '', 'config'],
     ['Crear las bodegas (principal, consultorios, nevera)', db.bodegas.length > 1, 'bodegas', 'nuevo', 'config'],
     ['Crear los grupos de productos', db.grupos.length > 0, 'grupos', 'nuevo', 'maestros'],
-    ['Registrar los proveedores', db.proveedores.length > 0, 'proveedores', 'nuevo', 'maestros'],
+    ['Registrar los terceros (proveedores con NIT)', db.proveedores.length > 0, 'terceros', 'nuevo', 'maestros'],
     ['Crear los productos (o importarlos desde Excel)', db.productos.length > 0, 'productos', 'nuevo', 'maestros'],
     ['Cargar el saldo inicial (importación) o la primera compra', db.movimientos.some((m) => m.tipo === 'inicial' || m.tipo === 'entrada'), 'importar', '', 'importar'],
     ['Hacer órdenes de compra y recibir mercancía', db.ordenes.length > 0, 'ordenes', 'nuevo', 'ordenes'],

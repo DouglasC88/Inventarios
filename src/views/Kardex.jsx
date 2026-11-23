@@ -2,6 +2,7 @@ import { Download, ScrollText } from 'lucide-react';
 import { useStore, C } from '../store.jsx';
 import { Btn, Chip, Empty, Panel } from '../components/ui.jsx';
 import { SelectProducto } from '../components/Movimientos.jsx';
+import { calcularExistencias } from './Existencias.jsx';
 import { descargar, fecha, money, money2, num, TONO_MOV } from '../format.js';
 
 export default function Kardex({ arg }) {
@@ -32,7 +33,25 @@ export default function Kardex({ arg }) {
       <div className="toolbar" style={{ maxWidth: 520 }}>
         <SelectProducto value={arg || ''} onChange={(v) => go('kardex', v)} />
       </div>
-      {!p ? <Empty icon={ScrollText} title="Seleccione un producto" text="Elija un producto para ver su kardex." /> : (
+      {!p ? (
+        <>
+          <p className="muted small">Busque el insumo arriba o elíjalo de esta lista de todos los insumos y su existencia total:</p>
+          <div className="tbl-wrap">
+            <table className="tbl">
+              <thead><tr><th>Código</th><th>Insumo</th><th>Grupo</th><th className="num">Existencia</th><th className="num">Valor</th><th /></tr></thead>
+              <tbody>
+                {calcularExistencias(db, state, hoy, 'todas').sort((a, b) => a.p.nombre.localeCompare(b.p.nombre)).map((x) => (
+                  <tr key={x.p.id} style={{ cursor: 'pointer' }} onClick={() => go('kardex', x.p.id)}>
+                    <td className="mono">{x.p.codigo}</td><td className="strong">{x.p.nombre}</td><td>{x.grupo || '—'}</td>
+                    <td className="num">{num(x.qty)} <span className="small muted">{x.p.unidad}</span></td><td className="num">{money(x.valor)}</td>
+                    <td className="acts"><Btn variant="ghost" size="sm" icon={ScrollText}>Ver kardex</Btn></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      ) : (
         <>
           <div className="kv">
             <div><span>Existencia</span><b>{num(s ? s.qty : 0)} {p.unidad}</b></div>

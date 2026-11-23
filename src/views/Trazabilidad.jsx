@@ -4,10 +4,10 @@ import { useStore, C } from '../store.jsx';
 import { Btn, Chip, Empty, Nota, Panel } from '../components/ui.jsx';
 import { fecha, money, num, TONO_MOV } from '../format.js';
 
-export default function Trazabilidad() {
+export default function Trazabilidad({ arg }) {
   const { db, state } = useStore();
-  const [texto, setTexto] = useState('');
-  const [buscado, setBuscado] = useState('');
+  const [texto, setTexto] = useState(arg || '');
+  const [buscado, setBuscado] = useState(arg || '');
   const buscar = () => {
     const g = C.parseGS1(texto);
     setBuscado(g && g.lote ? g.lote : texto.trim());

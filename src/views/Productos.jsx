@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Boxes, Pencil, Plus, ScrollText, Snowflake } from 'lucide-react';
 import { useStore, C } from '../store.jsx';
+import { SelectTercero } from '../components/Movimientos.jsx';
 import { Btn, Chip, Empty, Errores, Field, Modal, Panel, SearchBox, Tabs } from '../components/ui.jsx';
 import { money, num, fecha, INVIMA } from '../format.js';
 
@@ -78,9 +79,7 @@ export function FormProducto({ inicial, onClose }) {
         <Field label="Unidad de compra" hint="Ej.: caja x50. Vacío si se compra igual que se consume"><input className="input" value={f.unidadCompra} onChange={set('unidadCompra')} /></Field>
         <Field label="Unidades de consumo por unidad de compra"><input className="input" type="number" min="1" value={f.factorCompra} onChange={set('factorCompra')} /></Field>
         <Field label="Proveedor preferido">
-          <select className="select input" value={f.proveedorId} onChange={set('proveedorId')}>
-            <option value="">Sin proveedor</option>{db.proveedores.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-          </select>
+          <SelectTercero tipo="proveedor" value={f.proveedorId} onChange={(v) => setF((x) => Object.assign({}, x, { proveedorId: v }))} />
         </Field>
         <Field label="Días de entrega del proveedor" hint="Para calcular el punto de reorden"><input className="input" type="number" min="0" value={f.leadTime} onChange={set('leadTime')} /></Field>
       </div>

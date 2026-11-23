@@ -23,6 +23,7 @@ function normalizar(d) {
     db.bodegas = db.config.ubicaciones.map((nombre, i) => ({ id: 'b-' + i + '-' + C.nuevoId(), codigo: 'B' + (i + 1), nombre, tipo: /nevera|fr[ií]o/i.test(nombre) ? 'nevera' : /consultorio/i.test(nombre) ? 'consultorio' : 'bodega', responsable: '', sede: '', activa: true, principal: i === 0 }));
   }
   C.sincronizarBodegas(db);
+  db.proveedores = db.proveedores.map(C.normalizarTercero);
   if (!Array.isArray(d.lotes)) C.ordenar(db.movimientos).forEach((m) => { if (!m.anulado) C.asegurarLotes(db, m); });
   return db;
 }

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { PackagePlus, Plus, ScanBarcode, Trash2 } from 'lucide-react';
 import { useStore, C } from '../store.jsx';
 import { Btn, Errores, Field, Modal, Nota, Panel } from '../components/ui.jsx';
-import { MovTabla, SelectBodega, SelectProducto, useRegistrar } from '../components/Movimientos.jsx';
+import { MovTabla, SelectBodega, SelectProducto, SelectTercero, useRegistrar } from '../components/Movimientos.jsx';
 import { FormProveedor } from './Proveedores.jsx';
 import { money, num } from '../format.js';
 
@@ -97,14 +97,8 @@ export function NuevaEntrada({ onClose, ordenInicial }) {
         </Field>
         <Field label="Fecha"><input className="input" type="date" value={h.fecha} max={hoy} onChange={setHk('fecha')} /></Field>
         <Field label="Bodega que recibe"><SelectBodega value={h.bodega} onChange={(v) => setH((x) => Object.assign({}, x, { bodega: v }))} /></Field>
-        <Field label="Proveedor" span>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <select className="select input" value={h.proveedorId} onChange={(e) => elegirProveedor(e.target.value)} disabled={!!h.ordenId}>
-              <option value="">Seleccione…</option>
-              {db.proveedores.map((p) => <option key={p.id} value={p.id}>{p.nombre} · {p.nit}</option>)}
-            </select>
-            <Btn icon={Plus} onClick={() => setNuevoProv(true)} title="Nuevo proveedor" disabled={!!h.ordenId} />
-          </div>
+        <Field label="Proveedor (NIT o nombre)" span>
+          <SelectTercero tipo="proveedor" value={h.proveedorId} onChange={elegirProveedor} disabled={!!h.ordenId} onCreate={(q) => setNuevoProv({ buscar: q, tipos: ['proveedor'] })} />
         </Field>
         <Field label="Tipo de soporte">
           <select className="select input" value={h.docTipo} onChange={setHk('docTipo')}>
@@ -157,7 +151,7 @@ export function NuevaEntrada({ onClose, ordenInicial }) {
         Si el mismo producto llega en dos lotes, use una línea por lote. Se bloquea la entrada si falta la factura electrónica o el documento soporte, si el producto no tiene registro INVIMA vigente o si el lote ya está vencido.
         Si compra por empaque (caja, bolsa), elija esa unidad: el sistema convierte la cantidad y el costo a la unidad de consumo. El IVA descontable no hace parte del costo.
       </Nota>
-      {nuevoProv && <FormProveedor onClose={() => setNuevoProv(false)} onGuardado={(p) => setH((x) => Object.assign({}, x, { proveedorId: p.id, docTipo: p.obligadoFacturar ? 'FE' : 'DS' }))} />}
+      {nuevoProv && <FormProveedor inicial={nuevoProv === true ? {} : nuevoProv} onClose={() => setNuevoProv(false)} onGuardado={(p) => setH((x) => Object.assign({}, x, { proveedorId: p.id, docTipo: p.obligadoFacturar ? 'FE' : 'DS' }))} />}
     </Modal>
   );
 }

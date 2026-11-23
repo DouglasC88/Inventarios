@@ -396,3 +396,55 @@ div.input { background: #f6f9fd; }
   .tl-item { grid-template-columns: 1fr; }
   .userchip .who { display: none; }
 }
+
+/* ---------- Buscador (combo) ---------- */
+.combo { position: relative; min-width: 0; width: 100%; }
+.combo .combo-input { padding-left: 32px; padding-right: 30px; text-overflow: ellipsis; }
+.combo .combo-ico { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--dim); pointer-events: none; }
+.combo .combo-chev { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: var(--muted); cursor: pointer; }
+.combo-list { position: fixed; z-index: 120; overflow-y: auto; background: #fff; border: 1px solid rgba(0, 194, 255, 0.5); border-radius: 12px; box-shadow: 0 18px 50px rgba(10, 40, 90, 0.22), 0 0 18px rgba(0, 194, 255, 0.25); padding: 4px; }
+.combo-opt { padding: 8px 10px; border-radius: 8px; cursor: pointer; }
+.combo-opt .l { font-size: 13px; font-weight: 600; color: var(--text); }
+.combo-opt .s { font-size: 11.5px; color: var(--muted); font-family: var(--mono); }
+.combo-opt.act { background: rgba(0, 194, 255, 0.1); box-shadow: inset 0 0 0 1px rgba(0, 194, 255, 0.35); }
+.combo-opt.sel .l { color: var(--cyan-text); }
+.combo-opt.create { display: flex; align-items: center; gap: 6px; color: var(--cyan-text); font-weight: 700; font-size: 13px; border-top: 1px solid var(--line); margin-top: 4px; border-radius: 0 0 8px 8px; }
+.combo-empty { padding: 10px; color: var(--muted); font-size: 12.5px; }
+
+/* ---------- Existencias: tarjetas de bodega y de insumo ---------- */
+.bodega-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
+.bodega-card { text-align: left; cursor: pointer; padding: 14px 16px; font: inherit; color: inherit; transition: all 0.18s ease; }
+.bodega-card:hover { border-color: rgba(0, 194, 255, 0.5); box-shadow: 0 0 0 1px rgba(0, 194, 255, 0.3), 0 0 20px rgba(0, 194, 255, 0.2); }
+.bodega-card.on { border-color: var(--cyan); box-shadow: 0 0 0 2px rgba(0, 194, 255, 0.55), 0 0 26px rgba(0, 194, 255, 0.35); background: linear-gradient(135deg, #fff, #eaf8ff); }
+.bodega-card .bc-top { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.bodega-card.on .bc-top { color: var(--cyan-text); }
+.bodega-card .bc-val { font-family: var(--mono); font-size: 20px; font-weight: 700; margin-top: 6px; color: var(--text); }
+.bodega-card.on .bc-val { color: var(--cyan-2); text-shadow: 0 0 12px rgba(0, 194, 255, 0.35); }
+.bodega-card .bc-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.prod-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+.prod-card { padding: 14px 16px; display: grid; gap: 8px; align-content: start; }
+.prod-card.bajo { border-color: rgba(239, 59, 85, 0.35); }
+.pc-head { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
+.pc-name { font-weight: 700; line-height: 1.25; }
+.pc-code { font-family: var(--mono); font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+.pc-stock { display: flex; align-items: baseline; gap: 6px; }
+.pc-stock b { font-family: var(--mono); font-size: 26px; color: var(--cyan-2); text-shadow: 0 0 12px rgba(0, 194, 255, 0.3); }
+.prod-card.bajo .pc-stock b { color: var(--red); text-shadow: none; }
+.pc-stock span { color: var(--muted); }
+.pc-stock em { margin-left: auto; font-style: normal; font-size: 12px; color: var(--dim); }
+.pc-val { font-family: var(--mono); font-size: 13px; font-weight: 600; }
+.pc-lots { display: grid; gap: 4px; border-top: 1px dashed var(--line); padding-top: 8px; }
+.pc-lot { display: grid; grid-template-columns: auto auto 1fr auto; gap: 8px; align-items: center; font-size: 12px; }
+.pc-lot b { font-family: var(--mono); }
+.dot-sem { width: 8px; height: 8px; border-radius: 50%; }
+.dot-sem.green { background: var(--green); box-shadow: 0 0 6px var(--green); }
+.dot-sem.amber { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
+.dot-sem.red { background: var(--red); box-shadow: 0 0 6px var(--red); }
+.dot-sem.magenta { background: var(--magenta); box-shadow: 0 0 6px var(--magenta); }
+.dot-sem.muted { background: var(--dim); }
+.pc-acts { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
+.tabs button { display: inline-flex; align-items: center; gap: 5px; }
+
+/* ---------- Buscador general ---------- */
+.gsearch { flex: 1; min-width: 300px; max-width: 560px; }
+@media (max-width: 860px) { .gsearch { max-width: none; min-width: 0; } }

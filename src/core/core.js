@@ -161,6 +161,39 @@ function dbVacia() {
   };
 }
 
+// ---------- Terceros ----------
+const TIPOS_DOC = { NIT: 'NIT', CC: 'Cédula de ciudadanía', CE: 'Cédula de extranjería', PA: 'Pasaporte', TI: 'Tarjeta de identidad', NITE: 'NIT de otro país' };
+const TIPOS_TERCERO = { proveedor: 'Proveedor', cliente: 'Cliente', paciente: 'Paciente', empleado: 'Empleado', otro: 'Otro' };
+
+/** Dígito de verificación del NIT según el método de la DIAN (módulo 11). */
+function calcularDV(nit) {
+  const d = String(nit || '').replace(/\D/g, '');
+  if (!d) return '';
+  const pesos = [3, 7, 13, 17, 19, 23, 29, 37, 41, 43, 47, 53, 59, 67, 71];
+  let suma = 0;
+  for (let i = 0; i < d.length && i < pesos.length; i++) suma += Number(d[d.length - 1 - i]) * pesos[i];
+  const r = suma % 11;
+  return String(r > 1 ? 11 - r : r);
+}
+function documentoTercero(t) {
+  if (!t) return '';
+  const n = String(t.nit || '');
+  return (t.tipoDoc || 'NIT') + ' ' + n.replace(/\B(?=(\d{3})+(?!\d))/g, '.') + (t.tipoDoc === 'NIT' || !t.tipoDoc ? '-' + (t.dv !== undefined && t.dv !== '' ? t.dv : calcularDV(n)) : '');
+}
+/** Convierte el formato anterior ("900.123.456-7") al de terceros. */
+function normalizarTercero(t) {
+  const x = Object.assign({ tipoDoc: 'NIT', tipos: ['proveedor'], persona: 'juridica', direccion: '', ciudad: '', responsableIva: true, obligadoFacturar: true }, t);
+  if (!Array.isArray(x.tipos) || !x.tipos.length) x.tipos = ['proveedor'];
+  const raw = String(x.nit || '');
+  if (/[.\-\s]/.test(raw)) {
+    const m = raw.match(/^([\d.\s]+)-(\d)$/);
+    x.nit = (m ? m[1] : raw).replace(/\D/g, '');
+    if (m && (x.dv === undefined || x.dv === '')) x.dv = m[2];
+  }
+  if ((x.tipoDoc === 'NIT') && (x.dv === undefined || x.dv === '')) x.dv = calcularDV(x.nit);
+  return x;
+}
+
 // ---------- Bodegas ----------
 const TIPOS_BODEGA = { bodega: 'Bodega / almacén', consultorio: 'Consultorio', nevera: 'Nevera / cadena de frío', cuarentena: 'Cuarentena', sede: 'Sede externa' };
 
@@ -1066,6 +1099,7 @@ function csv(filas) {
 }
 
 export {
+  TIPOS_DOC, TIPOS_TERCERO, calcularDV, documentoTercero, normalizarTercero,
   TIPOS_BODEGA, sincronizarBodegas, renombrarBodega, bodegaEnUso,
   ESTADOS_LOTE, claveLote, buscarLote, asegurarLotes,
   r2, daysBetween, addDays, todayISO, yearOf, isISODate,

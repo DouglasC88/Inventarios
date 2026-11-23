@@ -263,3 +263,12 @@ test('bodegas: sincronizar activas y renombrar en cascada', () => {
   C.renombrarBodega(db, 'Central', 'Bodega central');
   assert.equal(db.movimientos[0].bodega, 'Bodega central');
 });
+
+test('dígito de verificación del NIT (DIAN)', () => {
+  assert.equal(C.calcularDV('800197268'), '4'); // NIT de la DIAN: 800.197.268-4
+  assert.equal(C.calcularDV('900123456'), '8');
+  const t = C.normalizarTercero({ nit: '800.197.268-4', nombre: 'X' });
+  assert.equal(t.nit, '800197268');
+  assert.equal(t.dv, '4');
+  assert.equal(C.documentoTercero(t), 'NIT 800.197.268-4');
+});

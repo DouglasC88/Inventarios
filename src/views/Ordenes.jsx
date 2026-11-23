@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { Ban, Eye, PackagePlus, Plus, Printer, ShoppingCart, Trash2 } from 'lucide-react';
 import { useStore, C } from '../store.jsx';
 import { Btn, Chip, Empty, Errores, Field, Modal, Panel, Tabs } from '../components/ui.jsx';
-import { SelectBodega, SelectProducto, nombreProducto } from '../components/Movimientos.jsx';
+import { SelectBodega, SelectProducto, SelectTercero, nombreProducto } from '../components/Movimientos.jsx';
+import { FormTercero } from './Proveedores.jsx';
 import { imprimirOrden } from '../components/imprimir.js';
 import { NuevaEntrada } from './Entradas.jsx';
 import { fecha, money, money2, num } from '../format.js';
@@ -14,6 +15,7 @@ export function NuevaOrden({ onClose, inicial }) {
   const [h, setH] = useState(() => Object.assign({ fecha: hoy, proveedorId: '', fechaEntrega: C.addDays(hoy, 7), bodega: C.bodegaPrincipal(db.config), nota: '' }, inicial ? inicial.encabezado : {}));
   const [lineas, setLineas] = useState(() => (inicial && inicial.lineas.length ? inicial.lineas : [{ productoId: '', cantidad: '', costoUnit: '' }]));
   const [err, setErr] = useState([]);
+  const [nuevoProv, setNuevoProv] = useState(null);
   const setL = (i, k, v) => setLineas((ls) => ls.map((l, j) => (j === i ? Object.assign({}, l, { [k]: v }) : l)));
   const total = lineas.reduce((s, l) => s + (Number(l.cantidad) || 0) * (Number(l.costoUnit) || 0), 0);
   const guardar = () => {
@@ -35,11 +37,8 @@ export function NuevaOrden({ onClose, inicial }) {
       footer={<><span className="muted" style={{ marginRight: 'auto' }}>Total {money(total)}</span><Btn onClick={onClose}>Cancelar</Btn><Btn variant="primary" onClick={guardar}>Crear orden</Btn></>}>
       <Errores lista={err} />
       <div className="form-grid">
-        <Field label="Proveedor" span>
-          <select className="select input" value={h.proveedorId} onChange={(e) => setH((x) => Object.assign({}, x, { proveedorId: e.target.value }))}>
-            <option value="">Seleccione…</option>
-            {db.proveedores.map((p) => <option key={p.id} value={p.id}>{p.nombre} · {p.nit}</option>)}
-          </select>
+        <Field label="Proveedor (NIT o nombre)" span>
+          <SelectTercero tipo="proveedor" value={h.proveedorId} onChange={(v) => setH((x) => Object.assign({}, x, { proveedorId: v }))} onCreate={(q) => setNuevoProv({ buscar: q, tipos: ['proveedor'] })} />
         </Field>
         <Field label="Fecha"><input className="input" type="date" value={h.fecha} onChange={(e) => setH((x) => Object.assign({}, x, { fecha: e.target.value }))} /></Field>
         <Field label="Entrega prevista"><input className="input" type="date" value={h.fechaEntrega} onChange={(e) => setH((x) => Object.assign({}, x, { fechaEntrega: e.target.value }))} /></Field>
@@ -64,6 +63,7 @@ export function NuevaOrden({ onClose, inicial }) {
         </table>
       </div>
       <div className="toolbar" style={{ marginTop: 10 }}><Btn size="sm" icon={Plus} onClick={() => setLineas((ls) => [...ls, { productoId: '', cantidad: '', costoUnit: '' }])}>Agregar producto</Btn></div>
+      {nuevoProv && <FormTercero inicial={nuevoProv} onClose={() => setNuevoProv(null)} onGuardado={(t) => setH((x) => Object.assign({}, x, { proveedorId: t.id }))} />}
     </Modal>
   );
 }

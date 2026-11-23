@@ -49,7 +49,10 @@ function NuevaSalida({ onClose }) {
           <select className="select input" value={h.destinoTipo} onChange={setHk('destinoTipo')}>{DESTINOS.map((d) => <option key={d}>{d}</option>)}</select>
         </Field>
         <Field label={h.destinoTipo === 'Paciente' ? 'Historia clínica o código del paciente' : 'Destino'} hint="Permite rastrear el lote en tecnovigilancia o retiros">
-          <input className="input" value={h.destino} onChange={setHk('destino')} />
+          <input className="input" value={h.destino} onChange={setHk('destino')} list="destinos-terceros" placeholder={h.destinoTipo === 'Paciente' ? 'HC o documento del paciente' : ''} />
+          <datalist id="destinos-terceros">
+            {db.proveedores.filter((t) => (t.tipos || []).some((x) => x === 'paciente' || x === 'cliente')).map((t) => <option key={t.id} value={C.documentoTercero(t) + ' · ' + t.nombre} />)}
+          </datalist>
         </Field>
         <Field label="Procedimiento"><input className="input" value={h.procedimiento} onChange={setHk('procedimiento')} placeholder="Ej.: Resina clase II" /></Field>
         <Field label="Responsable"><input className="input" value={h.responsable} onChange={setHk('responsable')} /></Field>

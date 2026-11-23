@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import {
-  ArrowRightLeft, BarChart3, Boxes, CalendarClock, ClipboardCheck, ClipboardList, Compass, FileSpreadsheet, FolderTree, Hexagon, Layers, Tags, Warehouse,
+  ArrowRightLeft, BarChart3, Contact, PackageSearch, Boxes, CalendarClock, ClipboardCheck, ClipboardList, Compass, FileSpreadsheet, FolderTree, Hexagon, Layers, Tags, Warehouse,
   LayoutDashboard, Lock, LogOut, Menu, PackageMinus, PackagePlus, RefreshCcw, Scale, ScanSearch, ScrollText,
-  Settings, ShoppingCart, SlidersHorizontal, Thermometer, Truck, Undo2, UsersRound
+  Settings, ShoppingCart, SlidersHorizontal, Thermometer, Undo2, UsersRound
 } from 'lucide-react';
 import { useStore, C } from './store.jsx';
 import { Toasts } from './components/ui.jsx';
@@ -34,6 +34,8 @@ import Bodegas from './views/Bodegas.jsx';
 import Grupos from './views/Grupos.jsx';
 import LotesMaestro from './views/LotesMaestro.jsx';
 import Guia from './views/Guia.jsx';
+import Existencias from './views/Existencias.jsx';
+import BuscadorGeneral from './components/BuscadorGeneral.jsx';
 
 // [clave, título, ícono, vista, permiso requerido para verla (opcional)]
 const NAV = [
@@ -53,6 +55,7 @@ const NAV = [
     ['reabastecimiento', 'Reabastecimiento', RefreshCcw, Reabastecimiento]
   ]],
   ['Control', [
+    ['existencias', 'Existencias', PackageSearch, Existencias],
     ['kardex', 'Kardex', ScrollText, Kardex],
     ['vencimientos', 'Vencimientos', CalendarClock, Lotes],
     ['trazabilidad', 'Trazabilidad', ScanSearch, Trazabilidad],
@@ -66,7 +69,7 @@ const NAV = [
     ['productos', 'Productos', Boxes, Productos],
     ['lotes', 'Lotes', Tags, LotesMaestro],
     ['kits', 'Kits por procedimiento', Layers, Kits],
-    ['proveedores', 'Proveedores', Truck, Proveedores]
+    ['terceros', 'Terceros (NIT)', Contact, Proveedores]
   ]],
   ['Sistema', [
     ['normativa', 'Normativa', Scale, Normativa],
@@ -91,7 +94,8 @@ export default function App() {
   const [menu, setMenu] = useState(false);
   const nav = NAV.map(([g, items]) => [g, items.filter((x) => !x[4] || puede(x[4]))]).filter(([, items]) => items.length);
   const plano = nav.flatMap(([, items]) => items);
-  const actual = plano.find((x) => x[0] === ruta.vista) || plano[0];
+  const vistaRuta = ruta.vista === 'proveedores' ? 'terceros' : ruta.vista;
+  const actual = plano.find((x) => x[0] === vistaRuta) || plano[0];
   const Vista = actual[3];
   const criticas = requiereLogin ? 0 : C.alertas(db, state, hoy).filter((a) => a.nivel === 'critico').length;
   const rqPend = db.requisiciones.filter((r) => ['pendiente', 'parcial'].includes(C.estadoRequisicion(db, r).estado)).length;
@@ -140,6 +144,7 @@ export default function App() {
               <div className="crumb">NOVA · {(nav.find(([, items]) => items.includes(actual)) || ['Inicio'])[0]}</div>
               <h1>{actual[1]}</h1>
             </div>
+            <BuscadorGeneral />
             <div className="spacer" />
             <Reloj />
             {usuario && (

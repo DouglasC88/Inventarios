@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Plus, Trash2, Undo2 } from 'lucide-react';
 import { useStore, C } from '../store.jsx';
 import { Btn, Errores, Field, Modal, Nota, Panel } from '../components/ui.jsx';
-import { MovTabla, SelectBodega, useRegistrar } from '../components/Movimientos.jsx';
+import { MovTabla, SelectBodega, SelectTercero, useRegistrar } from '../components/Movimientos.jsx';
 import { fecha, num } from '../format.js';
 
 function NuevaDevolucion({ onClose }) {
@@ -32,11 +32,8 @@ function NuevaDevolucion({ onClose }) {
       <Errores lista={err} />
       <div className="form-grid">
         <Field label="Fecha"><input className="input" type="date" value={h.fecha} max={hoy} onChange={setHk('fecha')} /></Field>
-        <Field label="Proveedor">
-          <select className="select input" value={h.proveedorId} onChange={setHk('proveedorId')}>
-            <option value="">Seleccione…</option>
-            {db.proveedores.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-          </select>
+        <Field label="Proveedor (NIT o nombre)" span>
+          <SelectTercero tipo="proveedor" value={h.proveedorId} onChange={(v) => setH((x) => Object.assign({}, x, { proveedorId: v }))} />
         </Field>
         <Field label="Bodega de donde sale"><SelectBodega value={h.bodega} onChange={(v) => setH((x) => Object.assign({}, x, { bodega: v }))} /></Field>
         <Field label="Causa">
