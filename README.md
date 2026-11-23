@@ -8,23 +8,22 @@ Aplicación JavaScript (React + Vite) con interfaz futurista tipo HUD en blanco 
 
 **Producción:** https://fluxstock-indol.vercel.app/ (despliegue automático de Vercel desde `main`).
 
-## Menú (11 secciones, cada una con sus pestañas)
+## Menú (8 secciones, cada una con sus pestañas)
 
 La pantalla de **Inicio** es el menú principal: un ícono en relieve por sección (al pasar el mouse sube y se agranda). No hay menú lateral; desde cualquier pantalla se vuelve con el botón Inicio o el logo, y cada sección muestra sus pestañas arriba.
 
 | Sección | Pestañas | Norma o referencia |
 | --- | --- | --- |
-| Inicio | Inicio (íconos) · Centro de control (alertas, cumplimiento, acciones rápidas) | — |
-| Compras y entradas | Entradas (factura electrónica o documento soporte, lote, vencimiento, GS1/UDI, unidad de compra) · Órdenes de compra · Reabastecimiento (punto de reorden) · Devoluciones | ET art. 771-2, NIC 2 |
-| Salidas y movimientos | Salidas y consumos (por paciente y servicio, FEFO) · Traslados · Requisiciones · Ajustes y bajas | Res. 1403/2007, ET art. 64 |
-| Kardex e inventario | Existencias (tarjeta general y por bodega) · Kardex · Vencimientos · Inventario físico (en pantalla o desde Excel) · Trazabilidad · Cadena de frío · Cierres (VNR) | ET arts. 62 y 65, C. de Co. art. 52, Res. 4816/2008 |
+| Centro de control | Alertas, cumplimiento y acciones rápidas | — |
+| Inventario | **Entradas:** entradas (factura electrónica o documento soporte, lote, vencimiento, GS1/UDI), órdenes de compra, reabastecimiento, devoluciones · **Salidas y movimientos:** salidas y consumos (por paciente y servicio, FEFO), traslados, requisiciones, ajustes y bajas · **Consultas:** existencias, kardex, vencimientos, trazabilidad · **Control:** inventario físico (en pantalla o desde Excel), cadena de frío, cierres (VNR) | ET arts. 62, 64, 65 y 771-2, C. de Co. art. 52, NIC 2, Res. 1403/2007 y 4816/2008 |
 | Productos y servicios | Productos e insumos (al crear se elige: insumo, dispositivo médico, medicamento, instrumental o servicio; ficha por secciones: identificación con foto y GTIN validado, sanitaria con datos de medicamento o dispositivo, almacenamiento y vida útil, reposición, proveedores con precio pactado, IVA y precio de venta, cuentas propias, lotes y existencia inicial) · Servicios (CUPS, precio e insumos que consume) · Lotes · Clasificación (línea › grupo › subgrupo) · Carga desde Excel (productos, terceros, plan de cuentas e inventario físico) | Res. 3100/2019, Dec. 4725/2005 |
 | Terceros | Persona natural (nombres y apellidos por separado) o jurídica, NIT con dígito de verificación DIAN, tipos (proveedor, cliente, paciente, empleado, asesor, laboratorio, extranjero), ubicación, régimen y responsabilidades del RUT, retenciones propias, plazo y medio de pago, cuenta bancaria, cuentas contables propias y datos del empleado con códigos de nómina electrónica | Res. DIAN 000042/2020 y 000013/2021 |
 | Contabilidad | Facturas de proveedor (cruce orden · entrada · factura, diferencia de precio, IVA y retenciones) · Comprobantes automáticos y manuales (con reversión de anulados) · Libro diario · Mayor y balances · Auxiliares por cuenta y tercero · Estado de costo · Conciliación (kardex y cuenta puente) · Plan de cuentas (PUC, carga desde Excel) · Parametrización por concepto y por clasificación · Interfaz contable configurable | Dec. 2650/1993, NIC 2, ET arts. 771-2 |
 | Reportes | 32 reportes con filtros, totales, Excel e impresión/PDF | — |
 | Configuración | General · Bodegas · Usuarios y roles | — |
 | Normatividad | Mapa de cada norma y cómo la aplica el sistema | — |
-| Portal de ayuda | Artículos "cómo hacer" con buscador · Primeros pasos | — |
+
+**Portal de ayuda** (botón *Ayuda* arriba o enlace en el Inicio): se abre en una pestaña nueva y no pide ingreso. Trae guías paso a paso, primeros pasos, preguntas frecuentes, glosario, plantillas de Excel, roles y permisos, y normatividad, con un buscador que busca en todo.
 
 Los documentos no se borran: se anulan con motivo. Todo queda en la auditoría
 con el usuario que lo hizo, y cada documento se puede imprimir.

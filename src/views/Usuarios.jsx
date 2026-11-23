@@ -4,7 +4,7 @@ import { useStore, C } from '../store.jsx';
 import { Btn, Chip, Empty, Errores, Field, Modal, Nota, Panel } from '../components/ui.jsx';
 import { SelectBodega } from '../components/Movimientos.jsx';
 
-const PERM_TEXTO = {
+export const PERM_TEXTO = {
   admin: 'Todo, incluidos usuarios, configuración e importación.',
   supervisor: 'Operación completa, ajustes, bajas, conteos, cierres y anulaciones.',
   almacenista: 'Entradas, salidas, traslados, devoluciones, órdenes, requisiciones y maestros. No ajusta ni cierra.',

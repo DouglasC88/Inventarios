@@ -91,7 +91,8 @@ const { chromium } = require('playwright');
   console.log('reporte kardex RES-A3'.padEnd(28), '|', await p.locator('.tbl tbody tr').count(), 'filas');
   // Menú por módulos
   await p.goto(URL + '#/inicio'); await p.waitForTimeout(200);
-  console.log('secciones en Inicio'.padEnd(28), '|', await p.locator('.tile').count(), '| menú lateral:', await p.locator('.sidebar').count(), '| pestañas en Compras:', (await (async () => { await p.goto(URL + '#/entradas'); await p.waitForTimeout(200); return p.locator('.modtabs a').count(); })()));
+  console.log('secciones en Inicio'.padEnd(28), '|', await p.locator('.tile').count(), '| menú lateral:', await p.locator('.sidebar').count(), '| pestañas en Inventario:', (await (async () => { await p.goto(URL + '#/entradas'); await p.waitForTimeout(200); return p.locator('.modtabs a').count(); })()), '| grupos:', (await p.locator('.modtabs .tabgrp').allTextContents()).join(', '));
+  console.log('enlace de ayuda'.padEnd(28), '|', await p.locator('.topbar a[href="#/ayuda"]').getAttribute('target'));
   await p.click('.home-btn'); await p.waitForTimeout(200);
   console.log('botón Inicio vuelve a'.padEnd(28), '|', await p.locator('.tile').count(), 'íconos');
   // Producto nuevo con lotes y existencia inicial
@@ -146,6 +147,13 @@ const { chromium } = require('playwright');
   console.log('comprobantes del mes'.padEnd(28), '|', await p.locator('.tbl tbody tr').count(), '| descuadrados', await p.locator('.kpi', { hasText: 'Descuadrados' }).locator('.value').textContent());
   await p.goto(URL + '#/conciliacion'); await p.waitForTimeout(300);
   console.log('conciliación kardex vs PUC'.padEnd(28), '|', await p.locator('.kpi', { hasText: 'Diferencia' }).locator('.value').textContent());
+  // El portal de ayuda abre en una pestaña nueva, sin pedir ingreso
+  const ctx2 = await b.newContext(); const p2 = await ctx2.newPage();
+  await p2.goto(URL + '#/ayuda'); await p2.waitForTimeout(500);
+  console.log('ayuda sin ingresar'.padEnd(28), '|', await p2.locator('.ayuda-hero h2').textContent(), '| pestañas', (await p2.locator('.ayuda-app .modtabs a').allTextContents()).length, '| login:', await p2.locator('input[type=password]').count());
+  await p2.click('.ayuda-app .modtabs >> text=Preguntas frecuentes'); await p2.waitForTimeout(150); console.log('preguntas frecuentes'.padEnd(28), '|', await p2.locator('.faq details').count());
+  await p2.click('.ayuda-app .modtabs >> text=Glosario'); await p2.waitForTimeout(150); console.log('glosario'.padEnd(28), '|', await p2.locator('.glosario .panel').count());
+  await ctx2.close();
   await p.goto(URL + '#/ayuda'); await p.waitForTimeout(300);
   await p.locator('.search input').fill('tercero'); await p.waitForTimeout(200);
   console.log('ayuda "tercero"'.padEnd(28), '|', await p.locator('.law .panel h3').allTextContents());

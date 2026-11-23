@@ -55,7 +55,7 @@ export default function Dashboard() {
         <div className="quick">
           {acciones.map(([t, Icon, ruta, , arg]) => <Btn key={t} icon={Icon} onClick={() => go(ruta, arg || 'nuevo')}>{t}</Btn>)}
           <Btn icon={BarChart3} onClick={() => go('reportes')}>Reportes</Btn>
-          <Btn variant="ghost" icon={Compass} onClick={() => go('guia')}>Guía de uso</Btn>
+          <a className="btn ghost" href="#/ayuda/pasos" target="_blank" rel="noopener" title="Se abre en una pestaña nueva"><Compass size={16} /> Guía de uso</a>
         </div>
       )}
 

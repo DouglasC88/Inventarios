@@ -4,7 +4,7 @@ import { useStore, C } from '../store.jsx';
 import { Btn, Chip, Empty, Errores, Field, Nota, Panel, Tabs } from '../components/ui.jsx';
 import { descargar, fecha, money, num } from '../format.js';
 
-const PLANTILLA = [
+export const PLANTILLA = [
   ['Código', 'Código alterno', 'Nombre', 'Categoría', 'Tipo de material', 'Clasificación', 'Marca', 'Referencia', 'Fabricante', 'Presentación', 'Unidad', 'Unidad de compra', 'Factor', 'Stock mínimo', 'Stock máximo', 'Proveedor', 'Días de entrega', 'Tarifa IVA', 'Precio de venta', 'Ubicación física', 'Registro INVIMA', 'Vence INVIMA', 'Riesgo', 'GTIN', 'Principio activo', 'Concentración', 'Forma farmacéutica', 'CUM', 'Cadena de frío', 'Implantable', 'Bodega', 'Lote', 'Vencimiento', 'Cantidad', 'Costo unitario'],
   ['GUA-NIT-M', '', 'Guantes de nitrilo talla M, caja x100', 'Dispositivo médico', 'Insumo consumible', '', 'Marca B', 'NIT-M-100', 'Fabricante de ejemplo', 'Caja x100', 'caja', 'caja', '1', '15', '60', '900123456', '3', '19', '', 'Estante B-2', 'INVIMA 2019DM-0004567', '2028-01-31', 'I', '', '', '', '', '', 'No', 'No', 'Bodega principal', 'GN-7781', '2027-12-31', '20', '21000'],
   ['LID-2E', '', 'Lidocaína 2 % con epinefrina, cartucho 1,8 mL', 'Medicamento', 'Medicamento', '', 'Marca C', '', '', 'Caja x50 cartuchos', 'cartucho', 'caja x50', '50', '60', '600', '', '10', 'Excluido', '', 'Gabinete medicamentos', 'INVIMA 2020M-0011223', '2028-06-30', 'N/A', '', 'Lidocaína clorhidrato + epinefrina', '2 % + 1:80.000', 'Cartucho anestésico', '19900000-01', 'No', 'No', 'Bodega principal', 'LD-2201', '2027-09-30', '100', '1900']
@@ -156,12 +156,12 @@ function ImportarProductos() {
   );
 }
 
-const PLANTILLA_TERCEROS = [
+export const PLANTILLA_TERCEROS = [
   ['Tipo documento', 'NIT', 'DV', 'Razón social', 'Primer nombre', 'Segundo nombre', 'Primer apellido', 'Segundo apellido', 'Sexo', 'Tipo', 'Régimen', 'Actividad económica', 'País', 'Departamento', 'Ciudad', 'Código DANE', 'Dirección', 'Teléfono', 'Celular', 'Correo', 'Contacto', 'Plazo de pago', 'Medio de pago', 'Banco', 'Tipo de cuenta', 'Número de cuenta', 'Retención', 'ReteICA'],
   ['NIT', '900123456', '8', 'Proveedor de ejemplo S.A.S.', '', '', '', '', '', 'Proveedor', 'Responsable de IVA', '4645', 'Colombia', 'Bogotá D.C.', 'Bogotá D.C.', '11001', 'Cra. 1 # 2-3', '6015550000', '3005550000', 'facturas@ejemplo.co', 'Ana Gómez', '30', 'Transferencia', 'Banco de ejemplo', 'Corriente', '0001234567', '2.5', '0.966'],
   ['CC', '1020304050', '', '', 'María', 'Fernanda', 'López', 'Gil', 'F', 'Paciente', 'No responsable de IVA', '', 'Colombia', 'Antioquia', 'Medellín', '', '', '', '3000000000', '', '', '', '', '', '', '', '', '']
 ];
-const PLANTILLA_PLAN = [
+export const PLANTILLA_PLAN = [
   ['Código', 'Nombre', 'Naturaleza', 'Tercero'],
   ['14', 'INVENTARIOS', 'D', ''], ['1455', 'Materiales, repuestos y accesorios', 'D', ''], ['145505', 'Insumos odontológicos', 'D', ''],
   ['22', 'PROVEEDORES', 'C', ''], ['2205', 'Nacionales', 'C', 'Sí']

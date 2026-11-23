@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-  ArrowRightLeft, BarChart3, Receipt, ListTree, Download, House, Stethoscope, Calculator, BookOpen, Landmark, LifeBuoy, Bell, Contact, PackageSearch, Boxes, CalendarClock, ClipboardCheck, ClipboardList, Compass, FileSpreadsheet, FolderTree, Hexagon, Layers, Tags, Warehouse,
+  ArrowRightLeft, ExternalLink, BarChart3, Receipt, ListTree, Download, House, Stethoscope, Calculator, BookOpen, Landmark, LifeBuoy, Bell, Contact, PackageSearch, Boxes, CalendarClock, ClipboardCheck, ClipboardList, Compass, FileSpreadsheet, FolderTree, Hexagon, Layers, Tags, Warehouse,
   LayoutDashboard, Lock, LogOut, Menu, PackageMinus, PackagePlus, RefreshCcw, Scale, ScanSearch, ScrollText,
   Settings, ShoppingCart, SlidersHorizontal, Thermometer, Undo2, UsersRound
 } from 'lucide-react';
@@ -33,7 +33,7 @@ import Login from './views/Login.jsx';
 import Bodegas from './views/Bodegas.jsx';
 import Grupos from './views/Grupos.jsx';
 import LotesMaestro from './views/LotesMaestro.jsx';
-import Guia, { PrimerosPasos } from './views/Guia.jsx';
+import CentroAyuda from './views/Guia.jsx';
 import Inicio from './views/Inicio.jsx';
 import { Facturas, Comprobantes, LibroDiario, MayorBalances, Auxiliar, EstadoCosto, Conciliacion, PlanCuentas, CuentasContables, Interfaz } from './views/Contabilidad.jsx';
 import Existencias from './views/Existencias.jsx';
@@ -47,26 +47,23 @@ const MODULOS = [
     ['inicio', 'Inicio', House, Inicio],
     ['panel', 'Centro de control', LayoutDashboard, Dashboard]
   ]],
-  ['compras', 'Compras y entradas', PackagePlus, [
-    ['entradas', 'Entradas de inventario', PackagePlus, Entradas],
-    ['ordenes', 'Órdenes de compra', ShoppingCart, Ordenes],
-    ['reabastecimiento', 'Reabastecimiento', RefreshCcw, Reabastecimiento],
-    ['devoluciones', 'Devoluciones', Undo2, Devoluciones]
-  ]],
-  ['salidas', 'Salidas y movimientos', PackageMinus, [
-    ['salidas', 'Salidas y consumos', PackageMinus, Salidas],
-    ['traslados', 'Traslados', ArrowRightLeft, Traslados],
-    ['requisiciones', 'Requisiciones', ClipboardList, Requisiciones],
-    ['ajustes', 'Ajustes y bajas', SlidersHorizontal, Ajustes]
-  ]],
-  ['kardex', 'Kardex e inventario', ScrollText, [
-    ['existencias', 'Existencias', PackageSearch, Existencias],
-    ['kardex', 'Kardex', ScrollText, Kardex],
-    ['vencimientos', 'Vencimientos', CalendarClock, Lotes],
-    ['conteos', 'Inventario físico', ClipboardCheck, Conteos],
-    ['trazabilidad', 'Trazabilidad', ScanSearch, Trazabilidad],
-    ['frio', 'Cadena de frío', Thermometer, Frio],
-    ['cierres', 'Cierres', Lock, Cierres]
+  // Un solo módulo con todo lo que mueve o consulta el inventario. El 6.º dato de cada pestaña es su grupo.
+  ['inventario', 'Inventario', Layers, [
+    ['entradas', 'Entradas', PackagePlus, Entradas, null, 'Entradas'],
+    ['ordenes', 'Órdenes de compra', ShoppingCart, Ordenes, null, 'Entradas'],
+    ['reabastecimiento', 'Reabastecimiento', RefreshCcw, Reabastecimiento, null, 'Entradas'],
+    ['devoluciones', 'Devoluciones', Undo2, Devoluciones, null, 'Entradas'],
+    ['salidas', 'Salidas y consumos', PackageMinus, Salidas, null, 'Salidas y movimientos'],
+    ['traslados', 'Traslados', ArrowRightLeft, Traslados, null, 'Salidas y movimientos'],
+    ['requisiciones', 'Requisiciones', ClipboardList, Requisiciones, null, 'Salidas y movimientos'],
+    ['ajustes', 'Ajustes y bajas', SlidersHorizontal, Ajustes, null, 'Salidas y movimientos'],
+    ['existencias', 'Existencias', PackageSearch, Existencias, null, 'Consultas'],
+    ['kardex', 'Kardex', ScrollText, Kardex, null, 'Consultas'],
+    ['vencimientos', 'Vencimientos', CalendarClock, Lotes, null, 'Consultas'],
+    ['trazabilidad', 'Trazabilidad', ScanSearch, Trazabilidad, null, 'Consultas'],
+    ['conteos', 'Inventario físico', ClipboardCheck, Conteos, null, 'Control'],
+    ['frio', 'Cadena de frío', Thermometer, Frio, null, 'Control'],
+    ['cierres', 'Cierres', Lock, Cierres, null, 'Control']
   ]],
   ['productos', 'Productos y servicios', Boxes, [
     ['productos', 'Productos e insumos', Boxes, Productos],
@@ -100,10 +97,6 @@ const MODULOS = [
   ]],
   ['normatividad', 'Normatividad', Scale, [
     ['normativa', 'Normatividad', Scale, Normativa]
-  ]],
-  ['ayuda', 'Portal de ayuda', LifeBuoy, [
-    ['ayuda', 'Portal de ayuda', LifeBuoy, Guia],
-    ['guia', 'Primeros pasos', Compass, PrimerosPasos]
   ]]
 ];
 
@@ -131,6 +124,8 @@ export default function App() {
 
   useEffect(() => { document.title = actual[1] + ' · NOVA Inventario'; }, [actual]);
 
+  // El portal de ayuda es una página aparte (se abre en otra pestaña) y no pide ingreso.
+  if (ruta.vista === 'ayuda' || ruta.vista === 'guia') return <><CentroAyuda arg={ruta.arg} /><Toasts items={toasts} /></>;
   if (requiereLogin) return <><Login /><Toasts items={toasts} /></>;
 
   return (
@@ -160,7 +155,7 @@ export default function App() {
             <div className="spacer" />
             <Reloj />
             <a className="btn icon-btn bell" href="#/panel" title={criticas + ' alertas críticas'} aria-label="Alertas"><Bell size={17} />{criticas > 0 && <span className="count">{criticas}</span>}</a>
-            <a className="btn sm" href="#/ayuda" title="Portal de ayuda"><LifeBuoy size={15} /> Ayuda</a>
+            <a className="btn sm" href="#/ayuda" target="_blank" rel="noopener" title="Abre el portal de ayuda en una pestaña nueva"><LifeBuoy size={15} /> Ayuda <ExternalLink size={12} /></a>
             {usuario && (
               <div className="userchip">
                 <div className="who"><b>{usuario.nombre}</b><span>{C.ROLES[usuario.rol]}{usuario.bodega ? ' · ' + usuario.bodega : ''}</span></div>
@@ -169,11 +164,14 @@ export default function App() {
             )}
           </header>
           {!enInicio && modulo[0] !== 'inicio' && modulo[3].length > 1 && (
-            <div className="modtabs">
-              {modulo[3].map(([k, label, Icon]) => (
-                <a key={k} href={'#/' + k} className={actual[0] === k ? 'on' : ''}><Icon size={15} />{label}
-                  {k === 'requisiciones' && rqPend > 0 && <span className="count">{rqPend}</span>}
-                </a>
+            <div className={'modtabs' + (modulo[3].some((t) => t[5]) ? ' agrupadas' : '')}>
+              {modulo[3].map(([k, label, Icon, , , grupo], i) => (
+                <span key={k} className="modtab-item">
+                  {grupo && (i === 0 || modulo[3][i - 1][5] !== grupo) && <span className="tabgrp">{grupo}</span>}
+                  <a href={'#/' + k} className={actual[0] === k ? 'on' : ''}><Icon size={15} />{label}
+                    {k === 'requisiciones' && rqPend > 0 && <span className="count">{rqPend}</span>}
+                  </a>
+                </span>
               ))}
             </div>
           )}

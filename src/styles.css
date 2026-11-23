@@ -564,3 +564,29 @@ div.input { background: #f6f9fd; }
 .prod-cell { display: flex; gap: 10px; align-items: flex-start; }
 @media (max-width: 720px) { .fp-ident { grid-template-columns: minmax(0, 1fr); } .fp-nav { top: -18px; } }
 .section-title[id^="fp-"] { scroll-margin-top: 64px; }
+
+/* Pestañas agrupadas del módulo Inventario */
+.modtabs.agrupadas { align-items: center; row-gap: 4px; }
+.modtab-item { display: inline-flex; align-items: center; gap: 6px; }
+.tabgrp { margin-left: 10px; padding-left: 12px; border-left: 1px solid rgba(0, 194, 255, 0.35); font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--violet-text, #6d28d9); font-weight: 700; white-space: nowrap; }
+.modtab-item:first-child .tabgrp { margin-left: 4px; padding-left: 0; border-left: 0; }
+.hero-ayuda { text-decoration: none; cursor: pointer; }
+.hero-ayuda:hover { box-shadow: 0 0 12px rgba(0, 194, 255, 0.45); text-decoration: none; }
+
+/* Centro de ayuda (página aparte) */
+.ayuda-app { position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; padding: 18px 16px 40px; }
+.ayuda-top { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+.ayuda-top .brand { display: flex; align-items: center; gap: 10px; }
+.ayuda-top .spacer { flex: 1; }
+.ayuda-hero h2 { display: flex; align-items: center; gap: 10px; }
+.ayuda-hero .search { margin-top: 14px; max-width: 720px; }
+.faq { display: grid; gap: 10px; }
+.faq details { padding: 14px 18px; }
+.faq summary { cursor: pointer; font-weight: 700; color: var(--text, #0f172a); }
+.faq details p { margin: 10px 0 0; color: var(--muted); line-height: 1.55; }
+.glosario { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.glosario .panel { padding: 14px 16px; }
+.glosario b { color: var(--cyan-text); }
+.glosario p { margin: 6px 0 0; color: var(--muted); font-size: 13.5px; line-height: 1.5; }
+@media (min-width: 1100px) { .launcher { grid-template-columns: repeat(4, minmax(0, 1fr)); max-width: 1180px; margin: 0 auto; width: 100%; } }
+.ayuda-app .modtabs { margin-top: 0; }
