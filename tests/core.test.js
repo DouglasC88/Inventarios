@@ -477,3 +477,43 @@ test('cuenta puente = pendiente por facturar, aun con devoluciones a proveedor',
   assert.equal(puente, pend);
   assert.equal((s.find((x) => x.cuenta === '2205') || {}).saldo, 2000);
 });
+
+test('tercero: nombre por partes, validación y datos del empleado', () => {
+  const db = C.dbVacia();
+  assert.deepEqual(C.partirNombre('María Fernanda López Gil'), { primerNombre: 'María', segundoNombre: 'Fernanda', primerApellido: 'López', segundoApellido: 'Gil' });
+  const t = C.normalizarTercero({ id: 'x', tipoDoc: 'CC', nit: '52000111', persona: 'natural', primerNombre: 'Ana', primerApellido: 'Ruiz', tipos: ['empleado'], departamento: 'Cauca', ciudad: 'Popayán', regimen: 'noResponsable' });
+  assert.equal(t.nombre, 'Ana Ruiz');
+  assert.equal(t.responsableIva, false);
+  const e = C.validarTercero(db, t);
+  assert.ok(e.some((x) => /tipo de contrato/.test(x)) && e.some((x) => /salario/.test(x)));
+  t.empleado = { tipoTrabajador: '01', tipoContrato: '2', periodicidad: '5', salario: 2000000, fechaInicio: '2026-01-01' };
+  assert.deepEqual(C.validarTercero(db, t), []);
+  assert.ok(C.validarTercero(db, { tipoDoc: 'CC', nit: '123456', persona: 'juridica', razonSocial: 'X', tipos: ['proveedor'], departamento: 'Meta', ciudad: 'Villavicencio' }).some((x) => /NIT/.test(x)));
+  assert.ok(C.validarTercero(db, { tipoDoc: 'NIT', nit: '900123456', persona: 'juridica', razonSocial: 'X', tipos: ['proveedor'], departamento: 'Meta', ciudad: 'V', conBanco: true }).some((x) => /banco/i.test(x)));
+});
+
+test('tercero: retenciones sugeridas y cuenta por pagar propia', () => {
+  const db = C.dbVacia();
+  db.config.contabilidad = Object.assign(C.cuentasBase(), { usarPuente: false });
+  db.planCuentas.push({ codigo: '220510', nombre: 'Proveedores del exterior', naturaleza: 'C' });
+  db.productos.push({ id: 'a', codigo: 'A', nombre: 'Guantes', unidad: 'caja', activo: true });
+  db.proveedores.push({ id: 'pv', tipoDoc: 'NIT', nit: '900123456', nombre: 'Prov', persona: 'juridica', responsabilidades: ['O-15'], reteicaPct: 0.5, cuentaCredito: '220510' });
+  const s = C.impuestosSugeridos(db, db.proveedores[0]);
+  assert.equal(s.retefuentePct, 0); // autorretenedor
+  assert.equal(s.reteicaPct, 0.5);
+  db.movimientos.push({ id: 'e', num: 'EN-1', tipo: 'entrada', fecha: '2026-01-10', proveedorId: 'pv', docTipo: 'FE', docNum: 'F1', lineas: [{ productoId: 'a', lote: 'L1', vence: '2027-01-01', cantidad: 10, costoUnit: 1000 }] });
+  const cp = C.comprobantesContables(db, C.replay(db));
+  assert.ok(cp[0].lineas.some((l) => l.cuenta === '220510' && l.credito === 10000));
+});
+
+test('carga masiva de terceros con nombres por partes, régimen y banco', () => {
+  const db = C.dbVacia();
+  const r = C.interpretarTerceros([
+    ['Tipo documento', 'Documento', 'Primer nombre', 'Primer apellido', 'Sexo', 'Tipo', 'Régimen', 'Departamento', 'Ciudad', 'Plazo de pago', 'Banco', 'Tipo de cuenta', 'Número de cuenta'],
+    ['CC', '52.000.111', 'Ana', 'Ruiz', 'F', 'Empleado', 'No responsable de IVA', 'cauca', 'Popayán', '30', 'Banco X', 'Ahorros', '123456']
+  ], db);
+  assert.deepEqual(r.errores, []);
+  const t = r.terceros[0];
+  assert.equal(t.nombre, 'Ana Ruiz'); assert.equal(t.departamento, 'Cauca'); assert.equal(t.regimen, 'noResponsable');
+  assert.equal(t.plazoPago, 30); assert.equal(t.tipoCuenta, 'ahorros'); assert.equal(t.sexo, 'F'); assert.deepEqual(t.tipos, ['empleado']);
+});

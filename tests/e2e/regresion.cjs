@@ -132,6 +132,22 @@ const { chromium } = require('playwright');
   await p.goto(URL + '#/ayuda'); await p.waitForTimeout(300);
   await p.locator('.search input').fill('tercero'); await p.waitForTimeout(200);
   console.log('ayuda "tercero"'.padEnd(28), '|', await p.locator('.law .panel h3').allTextContents());
+  // Tercero completo (persona natural, empleado, banco)
+  await p.goto(URL + '#/terceros/nuevo'); await p.waitForTimeout(300);
+  const fld = (l) => p.locator('.modal .field:has(label:text-is("' + l + '")) input').first();
+  await p.click('.modal .tabs >> text=Persona natural'); await p.waitForTimeout(150);
+  await fld('Número de documento *').fill('1018222333');
+  await fld('Primer nombre *').fill('Sofía'); await fld('Primer apellido *').fill('Mejía'); await fld('Segundo apellido').fill('Castro');
+  await p.click('.modal label.check:has-text("Empleado")'); await p.click('.modal label.check:has-text("Proveedor")');
+  await combo(p.locator('.modal .field:has(label:text-is("Departamento *")) .combo input'), 'Antio');
+  await fld('Ciudad o municipio *').fill('Envigado'); await fld('Celular').fill('3015550000');
+  await p.click('.modal label.check:has-text("Con información bancaria")'); await p.waitForTimeout(100);
+  await fld('Banco *').fill('Banco de prueba'); await p.locator('.modal .field:has(label:text-is("Tipo de cuenta *")) select').selectOption('ahorros'); await fld('Número de cuenta *').fill('4455667788');
+  await p.locator('.modal .field:has(label:text-is("Tipo de contrato *")) select').selectOption('2');
+  await fld('Salario *').fill('2500000'); await fld('Fecha de inicio del contrato *').fill('2026-03-01');
+  await p.click('.modal-foot >> text=Guardar'); await res('tercero natural empleado');
+  await p.locator('.search input').first().fill('1018222333').catch(() => {});
+  console.log('tercero en lista'.padEnd(28), '|', await p.locator('tbody tr', { hasText: 'Sofía Mejía Castro' }).count());
   // Contabilidad: factura de proveedor, comprobante manual, plan, cargas masivas, interfaz
   await p.goto(URL + '#/facturasp'); await p.waitForTimeout(300);
   const pendAntes = await p.locator('.kpi', { hasText: 'Mercancía recibida' }).locator('.value').textContent();

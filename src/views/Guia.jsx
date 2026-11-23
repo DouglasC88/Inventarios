@@ -7,11 +7,14 @@ const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toL
 
 // Portal de ayuda: artículos "cómo hacer", agrupados por sección del menú.
 const ARTICULOS = [
-  ['terceros', 'Cómo crear un tercero (proveedor, cliente o paciente)', ['terceros', 'nuevo'], [
-    'Menú Terceros › "Nuevo tercero".',
-    'Elija tipo de persona y tipo de documento. Para NIT escriba el número sin el dígito de verificación: el sistema lo calcula.',
-    'Escriba la razón social o el nombre, y marque si es proveedor, cliente, paciente o empleado.',
-    'Complete dirección, ciudad, correo de facturación, si es responsable de IVA y si factura electrónicamente.',
+  ['terceros', 'Cómo crear un tercero (proveedor, cliente, paciente o empleado)', ['terceros', 'nuevo'], [
+    'Menú Terceros › "Nuevo tercero". Elija persona natural (nombres y apellidos por separado, sexo) o persona jurídica (razón social y nombre comercial).',
+    'Tipo y número de documento. Para NIT escriba el número sin el dígito de verificación: el sistema lo calcula.',
+    'Marque qué es: proveedor, cliente, paciente, empleado, asesor, laboratorio o extranjero (puede ser varios).',
+    'Contacto y ubicación: correo, celular, teléfono, país, departamento, ciudad, dirección, sitio web y sede.',
+    'Tributario: régimen, responsabilidades del RUT (gran contribuyente, autorretenedor…), actividad CIIU, factura electrónica y retenciones propias. Las facturas de ese proveedor las toman solas.',
+    'Pagos: plazo (calcula el vencimiento de sus facturas), medio de pago, cuenta bancaria y cuentas contables propias.',
+    'Si es empleado: cargo, tipo de trabajador, contrato, periodicidad, salario y fecha de inicio (códigos de la nómina electrónica).',
     'También puede crearlo desde cualquier buscador de tercero: escriba el NIT y elija "Crear tercero".'
   ]],
   ['productos', 'Cómo crear un producto o insumo con sus lotes', ['productos', 'nuevo'], [

@@ -54,11 +54,13 @@ export function crearDemo(hoy) {
 
   const T = (id, nit, nombre, tipos, extra) => C.normalizarTercero(Object.assign({ id, tipoDoc: 'NIT', nit, dv: C.calcularDV(nit), nombre, tipos, persona: 'juridica', contacto: '', telefono: '', correo: '', direccion: '', ciudad: 'Bogotá D.C.', responsableIva: true, obligadoFacturar: true }, extra || {}));
   db.proveedores = [
-    T('pv1', '900123456', 'Dental Andina S.A.S.', ['proveedor'], { contacto: 'Laura Gómez', telefono: '601 555 0101', correo: 'ventas@ejemplo.co', direccion: 'Cra. 15 # 80-20' }),
-    T('pv2', '830987654', 'Distribuciones OdontoSur Ltda.', ['proveedor'], { contacto: 'Carlos Ruiz', telefono: '604 555 0202', correo: 'pedidos@ejemplo.co', ciudad: 'Medellín' }),
-    T('pv3', '79555222', 'Proveedor persona natural (no obligado a facturar)', ['proveedor'], { tipoDoc: 'CC', dv: '', persona: 'natural', responsableIva: false, obligadoFacturar: false }),
-    T('cl1', '901456789', 'Laboratorio Dental Aliado S.A.S.', ['cliente'], { contacto: 'Andrea Ríos', ciudad: 'Bogotá D.C.' }),
-    T('pa1', '1020304050', 'Paciente de ejemplo', ['paciente'], { tipoDoc: 'CC', dv: '', persona: 'natural', responsableIva: false, obligadoFacturar: false })
+    T('pv1', '900123456', 'Dental Andina S.A.S.', ['proveedor'], { contacto: 'Laura Gómez', telefono: '601 555 0101', celular: '300 555 0101', correo: 'ventas@ejemplo.co', correoFE: 'facturacion@ejemplo.co', direccion: 'Cra. 15 # 80-20', departamento: 'Bogotá D.C.', ciudad: 'Bogotá D.C.', actividad: '4645', plazoPago: 30, medioPago: 'transferencia', conBanco: true, banco: 'Banco de ejemplo', tipoCuenta: 'corriente', numeroCuenta: '0001234567', responsabilidades: ['O-13'] }),
+    T('pv2', '830987654', 'Distribuciones OdontoSur Ltda.', ['proveedor'], { contacto: 'Carlos Ruiz', telefono: '604 555 0202', correo: 'pedidos@ejemplo.co', departamento: 'Antioquia', ciudad: 'Medellín', plazoPago: 60, medioPago: 'transferencia', reteicaPct: 0.5 }),
+    T('pv3', '79555222', 'Proveedor persona natural (no obligado a facturar)', ['proveedor'], { tipoDoc: 'CC', dv: '', persona: 'natural', primerNombre: 'Jorge', primerApellido: 'Pérez', segundoApellido: 'Díaz', sexo: 'M', regimen: 'noResponsable', obligadoFacturar: false, departamento: 'Cundinamarca', ciudad: 'Chía', plazoPago: 0, medioPago: 'efectivo' }),
+    T('cl1', '901456789', 'Laboratorio Dental Aliado S.A.S.', ['cliente', 'laboratorio'], { contacto: 'Andrea Ríos', departamento: 'Bogotá D.C.', ciudad: 'Bogotá D.C.' }),
+    T('pa1', '1020304050', 'Paciente de ejemplo', ['paciente'], { tipoDoc: 'CC', dv: '', persona: 'natural', primerNombre: 'María', segundoNombre: 'Fernanda', primerApellido: 'López', segundoApellido: 'Gil', sexo: 'F', regimen: 'noContribuyente', obligadoFacturar: false, departamento: 'Bogotá D.C.', ciudad: 'Bogotá D.C.', celular: '310 555 0000' }),
+    T('em1', '1033444555', 'Asistente dental', ['empleado'], { tipoDoc: 'CC', dv: '', persona: 'natural', primerNombre: 'Paula', primerApellido: 'Martínez', segundoApellido: 'Ruiz', sexo: 'F', regimen: 'noResponsable', obligadoFacturar: false, departamento: 'Bogotá D.C.', ciudad: 'Bogotá D.C.', celular: '320 555 0303', medioPago: 'transferencia', conBanco: true, banco: 'Banco de ejemplo', tipoCuenta: 'ahorros', numeroCuenta: '0007654321',
+      empleado: { tipoTrabajador: '01', subtipo: '00', tipoContrato: '2', periodicidad: '5', salario: 2200000, fechaInicio: '2025-02-01', cargo: 'Auxiliar de odontología', altoRiesgo: false, salarioIntegral: false, sinAuxilioTransporte: false } })
   ];
 
   const P = (id, codigo, nombre, categoria, riesgo, unidad, stockMin, extra) => Object.assign({

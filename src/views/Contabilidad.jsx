@@ -55,10 +55,12 @@ function NuevaFactura({ onClose }) {
   const t = C.calcularFactura(fac);
   const prov = db.proveedores.find((x) => x.id === h.proveedorId);
   const marcarTodo = () => setSel(Object.fromEntries(pend.map((p) => [key(p), { valor: p.valor }])));
-  const elegirProveedor = (v) => { const pv = db.proveedores.find((x) => x.id === v); setH((x) => Object.assign({}, x, { proveedorId: v, docTipo: pv && pv.obligadoFacturar === false ? 'DS' : 'FE', ivaPct: pv && pv.responsableIva === false ? 0 : x.ivaPct })); setSel({}); };
+  // Al elegir el proveedor se traen de su ficha el tipo de soporte, el IVA, las retenciones y el plazo de pago.
+  const elegirProveedor = (v) => { const pv = db.proveedores.find((x) => x.id === v); setH((x) => Object.assign({}, x, { proveedorId: v, docTipo: pv && pv.obligadoFacturar === false ? 'DS' : 'FE' }, C.impuestosSugeridos(db, pv))); setSel({}); };
+  const plazo = prov ? Number(C.normalizarTercero(prov).plazoPago) || 0 : 0;
   const preview = lineas.length ? C.comprobantesContables(Object.assign({}, db, { movimientos: [], cierres: [], comprobantesManuales: [], facturasProveedor: [Object.assign({ id: 'prev', num: 'FP-?' }, fac)] }), state)[0] : null;
   const guardar = () => {
-    const f = Object.assign({ id: C.nuevoId() }, fac, { docNum: h.docNum.trim(), usuario: nombreUsuario, creado: new Date().toISOString() });
+    const f = Object.assign({ id: C.nuevoId() }, fac, { docNum: h.docNum.trim(), vence: C.isISODate(h.fecha) ? C.addDays(h.fecha, plazo) : '', usuario: nombreUsuario, creado: new Date().toISOString() });
     const e = C.validarFactura(db, f, hoy);
     if (e.length) return setErr(e);
     const numero = C.verNumero(db, 'factura');
@@ -76,6 +78,7 @@ function NuevaFactura({ onClose }) {
         <Field label="Fecha de la factura"><input className="input" type="date" value={h.fecha} max={hoy} onChange={(e) => setHk('fecha', e.target.value)} /></Field>
         <Field label="Tipo"><select className="select input" value={h.docTipo} onChange={(e) => setHk('docTipo', e.target.value)}>{Object.entries(C.DOC_TIPOS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></Field>
         <Field label="Número (prefijo y consecutivo DIAN)"><input className="input mono" value={h.docNum} onChange={(e) => setHk('docNum', e.target.value)} /></Field>
+        {prov && <Field label="Vencimiento" hint={'Plazo de la ficha del tercero: ' + (plazo ? plazo + ' días' : 'contado')}><input className="input" value={C.isISODate(h.fecha) ? fecha(C.addDays(h.fecha, plazo)) : ''} readOnly /></Field>}
       </div>
       <div className="section-title">2 · Mercancía recibida que cubre esta factura (cruce con la entrada)</div>
       {!h.proveedorId ? <p className="muted">Elija el proveedor para ver lo recibido pendiente de facturar.</p> : pend.length ? (
@@ -122,7 +125,7 @@ function NuevaFactura({ onClose }) {
 }
 
 export function Facturas({ arg }) {
-  const { db, state, puede, commit, toast, nombreUsuario } = useStore();
+  const { db, state, hoy, puede, commit, toast, nombreUsuario } = useStore();
   const [nueva, setNueva] = useState(arg === 'nuevo');
   const [ver, setVer] = useState(null);
   const [motivo, setMotivo] = useState('');
@@ -158,7 +161,7 @@ export function Facturas({ arg }) {
               <tbody>
                 {lista.map((f) => { const t = C.calcularFactura(f); return (
                   <tr key={f.id} className={f.anulado ? 'anulado' : ''}>
-                    <td className="mono">{f.num}</td><td>{fecha(f.fecha)}</td><td>{(db.proveedores.find((x) => x.id === f.proveedorId) || {}).nombre}<div className="small muted mono">{C.documentoTercero(db.proveedores.find((x) => x.id === f.proveedorId))}</div></td>
+                    <td className="mono">{f.num}</td><td>{fecha(f.fecha)}{f.vence ? <div className={'small ' + (!f.anulado && f.vence < hoy ? 'red-t' : 'muted')}>Vence {fecha(f.vence)}</div> : null}</td><td>{(db.proveedores.find((x) => x.id === f.proveedorId) || {}).nombre}<div className="small muted mono">{C.documentoTercero(db.proveedores.find((x) => x.id === f.proveedorId))}</div></td>
                     <td className="mono small">{f.docTipo} {f.docNum}</td><td className="num">{money(t.subtotal)}</td><td className="num">{money(t.iva)}</td><td className="num">{money(t.retefuente + t.reteiva + t.reteica)}</td>
                     <td className={'num' + (t.difPrecio ? ' red-t' : '')}>{money(t.difPrecio)}</td><td className="num strong">{money(t.total)}</td>
                     <td className="acts"><Btn variant="ghost" size="sm" icon={FileText} onClick={() => setVer(f.id)} /></td>

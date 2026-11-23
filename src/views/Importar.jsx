@@ -156,9 +156,9 @@ function ImportarProductos() {
 }
 
 const PLANTILLA_TERCEROS = [
-  ['Tipo documento', 'NIT', 'DV', 'Razón social', 'Tipo', 'Dirección', 'Ciudad', 'Teléfono', 'Correo', 'Contacto'],
-  ['NIT', '900123456', '8', 'Proveedor de ejemplo S.A.S.', 'Proveedor', 'Cra. 1 # 2-3', 'Bogotá D.C.', '6015550000', 'facturas@ejemplo.co', 'Ana Gómez'],
-  ['CC', '1020304050', '', 'Paciente de ejemplo', 'Paciente', '', 'Medellín', '3000000000', '', '']
+  ['Tipo documento', 'NIT', 'DV', 'Razón social', 'Primer nombre', 'Segundo nombre', 'Primer apellido', 'Segundo apellido', 'Sexo', 'Tipo', 'Régimen', 'Actividad económica', 'País', 'Departamento', 'Ciudad', 'Dirección', 'Teléfono', 'Celular', 'Correo', 'Contacto', 'Plazo de pago', 'Medio de pago', 'Banco', 'Tipo de cuenta', 'Número de cuenta', 'Retención', 'ReteICA'],
+  ['NIT', '900123456', '8', 'Proveedor de ejemplo S.A.S.', '', '', '', '', '', 'Proveedor', 'Responsable de IVA', '4645', 'Colombia', 'Bogotá D.C.', 'Bogotá D.C.', 'Cra. 1 # 2-3', '6015550000', '3005550000', 'facturas@ejemplo.co', 'Ana Gómez', '30', 'Transferencia', 'Banco de ejemplo', 'Corriente', '0001234567', '2.5', '0.966'],
+  ['CC', '1020304050', '', '', 'María', 'Fernanda', 'López', 'Gil', 'F', 'Paciente', 'No responsable de IVA', '', 'Colombia', 'Antioquia', 'Medellín', '', '', '3000000000', '', '', '', '', '', '', '', '', '']
 ];
 const PLANTILLA_PLAN = [
   ['Código', 'Nombre', 'Naturaleza', 'Tercero'],
@@ -192,8 +192,8 @@ function CargaTerceros() {
     commit((d) => {
       ok.forEach((t) => {
         const x = Object.assign({}, t); delete x.fila; delete x.existente;
-        if (t.existente) { const i = d.proveedores.findIndex((p) => p.id === t.id); d.proveedores[i] = Object.assign({}, d.proveedores[i], Object.fromEntries(Object.entries(x).filter(([, v]) => v !== '' && v !== null))); }
-        else d.proveedores.push(Object.assign(x, { id: C.nuevoId() + Math.random().toString(36).slice(2, 5) }));
+        if (t.existente) { const i = d.proveedores.findIndex((p) => p.id === t.id); d.proveedores[i] = C.normalizarTercero(Object.assign({}, d.proveedores[i], Object.fromEntries(Object.entries(x).filter(([, v]) => v !== '' && v !== null)))); }
+        else d.proveedores.push(C.normalizarTercero(Object.assign(x, { id: C.nuevoId() + Math.random().toString(36).slice(2, 5) })));
       });
     }, 'Carga masiva de terceros', nombre + ' · ' + ok.length + ' terceros');
     toast(ok.length + ' terceros cargados');
@@ -203,7 +203,7 @@ function CargaTerceros() {
   return (
     <div className="stack">
       <CargaArchivo titulo="Terceros desde Excel" nombrePlantilla="plantilla-terceros.csv" plantilla={PLANTILLA_TERCEROS}
-        texto="Proveedores, clientes, pacientes y empleados: tipo de documento, NIT o cédula, razón social, tipo, dirección, ciudad, teléfono y correo. El dígito de verificación se calcula y se valida."
+        texto="Proveedores, clientes, pacientes, empleados y laboratorios: documento, razón social o nombres y apellidos, tipo, régimen, ubicación, contacto, plazo y medio de pago, cuenta bancaria y retenciones. Solo son obligatorios el documento y el nombre; el dígito de verificación se calcula y se valida."
         onFilas={(f, n) => { setNombre(n); setRes(C.interpretarTerceros(f, db)); }} />
       {res && (
         <Panel title={'Vista previa: ' + nombre} icon={Contact}>

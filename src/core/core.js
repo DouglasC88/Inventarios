@@ -341,13 +341,16 @@ function comprobantesContables(db, state, f) {
   const cfg = Object.assign(cuentasBase(), db.config.contabilidad || {});
   const out = [];
   const nit = (id) => { const t = db.proveedores.find((x) => x.id === id); return t ? String(t.nit || '') : ''; };
+  // Cuenta por pagar propia del tercero (ficha del tercero › cuenta crédito), si existe y recibe movimiento.
+  const ctaProv = (id) => { const t = db.proveedores.find((x) => x.id === id); return t && t.cuentaCredito && esDeMovimiento(db, t.cuentaCredito) ? t.cuentaCredito : ''; };
   const cc = (b) => (cfg.centroCostoPorBodega ? ((db.bodegas.find((x) => x.nombre === b) || {}).codigo || b) : '');
   const nuevo = () => {
     const lineas = [];
-    const add = (concepto, producto, debito, credito, tercero, centro, detalle) => {
+    const add = (concepto, producto, debito, credito, tercero, centro, detalle, cuentaFija) => {
       debito = r2(debito); credito = r2(credito);
       if (!debito && !credito) return;
-      const cu = cuentaDe(db, concepto, producto);
+      const fija = cuentaFija && cuentaPlan(db, cuentaFija);
+      const cu = fija ? { cuenta: fija.codigo, nombre: fija.nombre } : cuentaDe(db, concepto, producto);
       const ex = lineas.find((x) => x.cuenta === cu.cuenta && x.tercero === (tercero || '') && x.centro === (centro || '') && (debito > 0) === (x.debito > 0) && x.detalle === detalle);
       if (ex) { ex.debito = r2(ex.debito + debito); ex.credito = r2(ex.credito + credito); return; }
       lineas.push({ cuenta: cu.cuenta, nombre: cu.nombre, concepto, debito, credito, tercero: tercero || '', centro: centro || '', detalle });
@@ -381,7 +384,7 @@ function comprobantesContables(db, state, f) {
         const base = baseLinea(l);
         add('inventario', p, v, 0, '', cc(b), 'Entrada ' + m.num);
         if (cfg.usarPuente) add('puente', p, 0, base, nit(m.proveedorId), '', 'Recibido por facturar ' + m.docTipo + ' ' + m.docNum);
-        else add('proveedores', p, 0, base, nit(m.proveedorId), '', 'Compra ' + m.docTipo + ' ' + m.docNum);
+        else add('proveedores', p, 0, base, nit(m.proveedorId), '', 'Compra ' + m.docTipo + ' ' + m.docNum, ctaProv(m.proveedorId));
         if (r2(v - base) > 0) add('costosAdic', p, 0, r2(v - base), '', '', 'Costos adicionales de la compra');
       } else if (m.tipo === 'inicial') {
         add('inventario', p, v, 0, '', cc(b), 'Saldo inicial'); add('apertura', p, 0, v, '', '', 'Saldo inicial');
@@ -390,7 +393,7 @@ function comprobantesContables(db, state, f) {
         add('inventario', p, 0, v, '', cc(b), 'Salida de inventario');
       } else if (m.tipo === 'devolucion') {
         // La devolución queda a cargo del proveedor (nota crédito por recibir); la cuenta puente solo cruza entradas y facturas.
-        add('proveedores', p, v, 0, nit(m.proveedorId), '', 'Devolución ' + (m.docNum || '') + ' · nota crédito por recibir');
+        add('proveedores', p, v, 0, nit(m.proveedorId), '', 'Devolución ' + (m.docNum || '') + ' · nota crédito por recibir', ctaProv(m.proveedorId));
         add('inventario', p, 0, v, '', cc(b), 'Devolución a proveedor');
       } else if (m.tipo === 'baja' || (m.tipo === 'ajuste' && q < 0)) {
         add('faltantes', p, v, 0, '', cc(b), m.tipo === 'baja' ? 'Baja: ' + (CAUSAS_BAJA[m.causa] || '') : 'Ajuste: ' + (CAUSAS_AJUSTE[l.causa] || ''));
@@ -418,7 +421,7 @@ function comprobantesContables(db, state, f) {
     add('retefuente', null, 0, t.retefuente, n, '', 'Retención en la fuente ' + ref);
     add('reteiva', null, 0, t.reteiva, n, '', 'ReteIVA ' + ref);
     add('reteica', null, 0, t.reteica, n, '', 'ReteICA ' + ref);
-    add('proveedores', null, 0, t.total, n, '', 'Factura ' + ref);
+    add('proveedores', null, 0, t.total, n, '', 'Factura ' + ref, ctaProv(fp.proveedorId));
     emitir({ id: fp.id, fecha: fp.fecha, num: 'CT-' + fp.num, documento: fp.num, tipo: 'Factura de proveedor', origen: 'compras', descripcion: (db.proveedores.find((x) => x.id === fp.proveedorId) || {}).nombre + ' · ' + ref }, lineas, fp.anulado ? fp.anulacion || {} : null);
   });
   db.cierres.forEach((ci) => {
@@ -549,11 +552,16 @@ function interpretarTerceros(filas, db) {
     tipoDoc: col(['tipo documento', 'tipo de documento', 'tipo doc', 'tipodoc']), nit: col(['nit', 'documento', 'numero', 'número', 'identificacion', 'identificación', 'nit o documento']),
     dv: col(['dv', 'digito', 'dígito', 'digito de verificacion', 'dígito de verificación']), nombre: col(['nombre', 'razon social', 'razón social', 'nombre o razon social', 'nombre o razón social']),
     tipos: col(['tipo', 'tipo tercero', 'tipo de tercero', 'clase']), direccion: col(['direccion', 'dirección']), ciudad: col(['ciudad', 'municipio']),
-    telefono: col(['telefono', 'teléfono', 'celular']), correo: col(['correo', 'email', 'e-mail', 'correo electronico', 'correo electrónico']), contacto: col(['contacto'])
+    telefono: col(['telefono', 'teléfono']), celular: col(['celular', 'movil', 'móvil']), correo: col(['correo', 'email', 'e-mail', 'correo electronico', 'correo electrónico']), contacto: col(['contacto']),
+    primerNombre: col(['primer nombre']), segundoNombre: col(['segundo nombre']), primerApellido: col(['primer apellido']), segundoApellido: col(['segundo apellido']),
+    sexo: col(['sexo', 'genero', 'género']), pais: col(['pais', 'país']), departamento: col(['departamento']), regimen: col(['regimen', 'régimen']),
+    actividad: col(['actividad', 'actividad economica', 'actividad económica', 'ciiu']), plazo: col(['plazo', 'plazo de pago', 'plazos de pago', 'dias de pago', 'días de pago']),
+    medioPago: col(['medio de pago', 'forma de pago']), banco: col(['banco']), tipoCuenta: col(['tipo de cuenta', 'tipo cuenta']), numeroCuenta: col(['numero de cuenta', 'número de cuenta', 'no cuenta', 'no. cuenta', 'cuenta bancaria']),
+    retefuente: col(['retencion', 'retención', 'porcentaje de retencion', 'porcentaje de retención', 'retefuente']), reteica: col(['reteica', 'porcentaje reteica'])
   };
   const errores = [];
   if (idx.nit < 0) errores.push('Falta la columna "NIT" o "Documento".');
-  if (idx.nombre < 0) errores.push('Falta la columna "Nombre" o "Razón social".');
+  if (idx.nombre < 0 && (idx.primerNombre < 0 || idx.primerApellido < 0)) errores.push('Falta la columna "Nombre" o "Razón social" (o "Primer nombre" y "Primer apellido").');
   if (errores.length) return { errores, terceros: [] };
   const v = (f, k) => (idx[k] < 0 ? '' : String(f[idx[k]] === undefined || f[idx[k]] === null ? '' : f[idx[k]]).trim());
   const terceros = [];
@@ -561,7 +569,8 @@ function interpretarTerceros(filas, db) {
   filas.slice(1).forEach((f, i) => {
     const fila = i + 2;
     const crudo = v(f, 'nit');
-    const nombre = v(f, 'nombre');
+    const partes = { primerNombre: v(f, 'primerNombre'), segundoNombre: v(f, 'segundoNombre'), primerApellido: v(f, 'primerApellido'), segundoApellido: v(f, 'segundoApellido') };
+    const nombre = v(f, 'nombre') || nombreTercero(Object.assign({ persona: 'natural' }, partes));
     if (!crudo && !nombre) return;
     const tdTxt = norm(v(f, 'tipoDoc')).toUpperCase().replace(/\./g, '');
     const tipoDoc = TIPOS_DOC[tdTxt] ? tdTxt : tdTxt.startsWith('CED') || tdTxt === 'CEDULA' ? 'CC' : 'NIT';
@@ -577,14 +586,129 @@ function interpretarTerceros(filas, db) {
     const tt = norm(v(f, 'tipos'));
     const tipos = Object.keys(TIPOS_TERCERO).filter((k) => tt.includes(k) || tt.includes(norm(TIPOS_TERCERO[k])));
     const existente = db.proveedores.find((x) => (x.tipoDoc || 'NIT') === tipoDoc && String(x.nit) === nit);
-    terceros.push({ fila, existente: !!existente, id: existente ? existente.id : null, tipoDoc, nit, dv, nombre, persona: tipoDoc === 'NIT' ? 'juridica' : 'natural', tipos: tipos.length ? tipos : ['proveedor'], direccion: v(f, 'direccion'), ciudad: v(f, 'ciudad'), telefono: v(f, 'telefono'), correo: v(f, 'correo'), contacto: v(f, 'contacto'), responsableIva: true, obligadoFacturar: tipoDoc === 'NIT', activo: true });
+    const persona = tipoDoc === 'NIT' && !partes.primerNombre ? 'juridica' : 'natural';
+    const rg = norm(v(f, 'regimen'));
+    const regimen = !rg ? (existente ? '' : tipoDoc === 'NIT' ? 'responsable' : 'noResponsable') : rg.includes('simple') ? 'simple' : rg.includes('especial') ? 'especial' : rg.includes('no contrib') ? 'noContribuyente' : rg.includes('no ') || rg.includes('simplificado') ? 'noResponsable' : 'responsable';
+    const sx = v(f, 'sexo').toUpperCase().charAt(0);
+    const plazo = v(f, 'plazo') === '' ? '' : Number(String(v(f, 'plazo')).replace(/\D/g, '')) || 0;
+    const mp = norm(v(f, 'medioPago'));
+    const tc = norm(v(f, 'tipoCuenta'));
+    const pct = (k) => { const x = v(f, k).replace('%', '').replace(',', '.'); return x === '' ? '' : Number(x); };
+    const banco = v(f, 'banco');
+    const dep = v(f, 'departamento');
+    const t = {
+      fila, existente: !!existente, id: existente ? existente.id : null, tipoDoc, nit, dv, nombre, persona, tipos: tipos.length ? tipos : existente ? existente.tipos || ['proveedor'] : ['proveedor'],
+      direccion: v(f, 'direccion'), ciudad: v(f, 'ciudad'), departamento: DEPARTAMENTOS.find((d) => norm(d) === norm(dep)) || dep, pais: v(f, 'pais') || (existente ? '' : 'Colombia'),
+      telefono: v(f, 'telefono'), celular: v(f, 'celular'), correo: v(f, 'correo'), contacto: v(f, 'contacto'),
+      sexo: persona === 'natural' && SEXOS[sx] ? sx : '', regimen, responsableIva: regimen ? !['noResponsable', 'noContribuyente'].includes(regimen) : '', obligadoFacturar: existente ? '' : tipoDoc === 'NIT',
+      actividad: v(f, 'actividad'), plazoPago: plazo, medioPago: Object.keys(MEDIOS_PAGO).find((k) => mp && (mp.includes(k) || mp.includes(norm(MEDIOS_PAGO[k])))) || '',
+      conBanco: banco ? true : '', banco, tipoCuenta: tc.includes('corr') ? 'corriente' : tc.includes('ahor') ? 'ahorros' : tc ? 'deposito' : '', numeroCuenta: v(f, 'numeroCuenta'),
+      retefuentePct: pct('retefuente'), reteicaPct: pct('reteica'), activo: true
+    };
+    if (persona === 'natural') Object.assign(t, partes.primerNombre ? partes : partirNombre(nombre)); else t.razonSocial = nombre;
+    if (t.retefuentePct !== '' && !(t.retefuentePct >= 0 && t.retefuentePct <= 100)) errores.push('Fila ' + fila + ': el porcentaje de retención no es válido.');
+    terceros.push(t);
   });
   return { errores, terceros };
 }
 
 // ---------- Terceros ----------
-const TIPOS_DOC = { NIT: 'NIT', CC: 'Cédula de ciudadanía', CE: 'Cédula de extranjería', PA: 'Pasaporte', TI: 'Tarjeta de identidad', NITE: 'NIT de otro país' };
-const TIPOS_TERCERO = { proveedor: 'Proveedor', cliente: 'Cliente', paciente: 'Paciente', empleado: 'Empleado', otro: 'Otro' };
+const TIPOS_DOC = {
+  CC: 'Cédula de ciudadanía', NIT: 'NIT', CE: 'Cédula de extranjería', TI: 'Tarjeta de identidad', RC: 'Registro civil', PA: 'Pasaporte',
+  PPT: 'Permiso por protección temporal', PEP: 'Permiso especial de permanencia', TE: 'Tarjeta de extranjería', NITE: 'NIT de otro país', DIE: 'Documento de identificación extranjero'
+};
+const TIPOS_TERCERO = { proveedor: 'Proveedor', cliente: 'Cliente', paciente: 'Paciente', empleado: 'Empleado', asesor: 'Asesor o contratista', laboratorio: 'Laboratorio', otro: 'Otro' };
+const SEXOS = { F: 'Femenino', M: 'Masculino', I: 'Indeterminado' };
+/** Régimen tributario del tercero. Define si cobra IVA en sus facturas. */
+const REGIMENES = { responsable: 'Responsable de IVA', noResponsable: 'No responsable de IVA', simple: 'Régimen Simple de Tributación', especial: 'Régimen tributario especial (ESAL)', noContribuyente: 'No contribuyente' };
+/** Responsabilidades fiscales del RUT (códigos DIAN de la factura electrónica). */
+const RESPONSABILIDADES = { 'O-13': 'Gran contribuyente', 'O-15': 'Autorretenedor', 'O-23': 'Agente de retención de IVA', 'O-47': 'Régimen simple de tributación', 'R-99-PN': 'No aplica (otros)' };
+const MEDIOS_PAGO = { transferencia: 'Transferencia bancaria', efectivo: 'Efectivo', consignacion: 'Consignación', cheque: 'Cheque', tarjeta: 'Tarjeta débito o crédito', otro: 'Otro' };
+const PLAZOS_PAGO = { 0: 'Contado', 8: '8 días', 15: '15 días', 30: '30 días', 45: '45 días', 60: '60 días', 90: '90 días' };
+const TIPOS_CUENTA_BANCO = { ahorros: 'Ahorros', corriente: 'Corriente', deposito: 'Depósito electrónico' };
+// Datos laborales con los códigos de la nómina electrónica (DIAN, Res. 000013 de 2021).
+const TIPOS_TRABAJADOR = { '01': 'Dependiente', '02': 'Servicio doméstico', '04': 'Madre comunitaria', '12': 'Aprendiz SENA en etapa lectiva', '19': 'Aprendiz SENA en etapa productiva', '20': 'Estudiante (Ley 789 de 2002)', '21': 'Estudiante de posgrado en salud', '23': 'Estudiante (solo riesgos laborales)', '51': 'Trabajador de tiempo parcial' };
+const SUBTIPOS_TRABAJADOR = { '00': 'No aplica', '01': 'Dependiente pensionado por vejez activo' };
+const TIPOS_CONTRATO = { '1': 'Término fijo', '2': 'Término indefinido', '3': 'Obra o labor', '4': 'Aprendizaje', '5': 'Prácticas o pasantías' };
+const PERIODICIDADES = { '5': 'Mensual', '4': 'Quincenal', '2': 'Decenal', '3': 'Catorcenal', '1': 'Semanal', '6': 'Otra' };
+const DEPARTAMENTOS = ['Amazonas', 'Antioquia', 'Arauca', 'Atlántico', 'Bogotá D.C.', 'Bolívar', 'Boyacá', 'Caldas', 'Caquetá', 'Casanare', 'Cauca', 'Cesar', 'Chocó', 'Córdoba', 'Cundinamarca', 'Guainía', 'Guaviare', 'Huila', 'La Guajira', 'Magdalena', 'Meta', 'Nariño', 'Norte de Santander', 'Putumayo', 'Quindío', 'Risaralda', 'San Andrés y Providencia', 'Santander', 'Sucre', 'Tolima', 'Valle del Cauca', 'Vaupés', 'Vichada'];
+
+/** Nombre del tercero: nombres y apellidos (persona natural) o razón social. */
+function nombreTercero(t) {
+  if (t.persona === 'natural') {
+    const n = [t.primerNombre, t.segundoNombre, t.primerApellido, t.segundoApellido].map((x) => String(x || '').trim()).filter(Boolean).join(' ');
+    if (n) return n;
+  }
+  return String(t.razonSocial || t.nombre || '').trim();
+}
+
+/** Separa "Nombres Apellidos" en sus partes (1 nombre y 1 apellido, 1 y 2, o 2 y 2). */
+function partirNombre(nombre) {
+  const w = String(nombre || '').trim().split(/\s+/).filter(Boolean);
+  if (w.length <= 1) return { primerNombre: w[0] || '', segundoNombre: '', primerApellido: '', segundoApellido: '' };
+  if (w.length === 2) return { primerNombre: w[0], segundoNombre: '', primerApellido: w[1], segundoApellido: '' };
+  if (w.length === 3) return { primerNombre: w[0], segundoNombre: '', primerApellido: w[1], segundoApellido: w[2] };
+  return { primerNombre: w[0], segundoNombre: w.slice(1, w.length - 2).join(' '), primerApellido: w[w.length - 2], segundoApellido: w[w.length - 1] };
+}
+
+/** Valida la ficha de un tercero. Devuelve la lista de errores (vacía si está bien). */
+function validarTercero(db, t) {
+  const e = [];
+  const esNit = t.tipoDoc === 'NIT';
+  const numerico = ['NIT', 'CC', 'TI', 'RC'].includes(t.tipoDoc);
+  const nit = String(t.nit || '').replace(numerico ? /\D/g : /\s/g, '');
+  if (!TIPOS_DOC[t.tipoDoc]) e.push('Elija el tipo de documento.');
+  if (!nit) e.push('Escriba el número de documento.');
+  else if ((esNit || t.tipoDoc === 'CC') && !/^\d{5,15}$/.test(nit)) e.push('El número debe tener entre 5 y 15 dígitos, sin puntos ni dígito de verificación.');
+  if (esNit && t.dv !== '' && t.dv !== undefined && String(t.dv) !== calcularDV(nit)) e.push('El dígito de verificación no corresponde al NIT (debería ser ' + calcularDV(nit) + ').');
+  if (t.persona === 'natural') {
+    if (!String(t.primerNombre || '').trim()) e.push('Escriba el primer nombre.');
+    if (!String(t.primerApellido || '').trim()) e.push('Escriba el primer apellido.');
+  } else if (!String(t.razonSocial || t.nombre || '').trim()) e.push('Escriba la razón social.');
+  if (t.persona === 'juridica' && !esNit && !['NITE', 'DIE'].includes(t.tipoDoc)) e.push('Una persona jurídica se identifica con NIT.');
+  if (!t.tipos || !t.tipos.length) e.push('Marque al menos un tipo de tercero.');
+  if (db.proveedores.some((x) => x.id !== t.id && (x.tipoDoc || 'NIT') === t.tipoDoc && String(normalizarTercero(x).nit) === nit)) e.push('Ya existe un tercero con ese documento.');
+  const correo = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+  if (t.correo && !correo.test(t.correo)) e.push('El correo no es válido.');
+  if (t.correoFE && !correo.test(t.correoFE)) e.push('El correo de factura electrónica no es válido.');
+  if (t.sitioWeb && /\s/.test(t.sitioWeb)) e.push('El sitio web no es válido.');
+  if (!t.extranjero && (!String(t.departamento || '').trim() || !String(t.ciudad || '').trim())) e.push('Indique departamento y ciudad.');
+  ['retefuentePct', 'reteicaPct'].forEach((k) => { if (t[k] !== '' && t[k] !== undefined && t[k] !== null && !(Number(t[k]) >= 0 && Number(t[k]) <= 100)) e.push('El porcentaje de ' + (k === 'retefuentePct' ? 'retención en la fuente' : 'reteICA') + ' debe estar entre 0 y 100.'); });
+  if (t.conBanco) {
+    if (!String(t.banco || '').trim()) e.push('Escriba el banco.');
+    if (!TIPOS_CUENTA_BANCO[t.tipoCuenta]) e.push('Elija el tipo de cuenta bancaria.');
+    if (!/^[\d-]{4,20}$/.test(String(t.numeroCuenta || '').trim())) e.push('El número de cuenta bancaria debe tener de 4 a 20 dígitos.');
+  }
+  ['cuentaCredito', 'cuentaDebito'].forEach((k) => {
+    if (!t[k]) return;
+    if (!cuentaPlan(db, t[k])) e.push('La cuenta ' + t[k] + ' no existe en el plan de cuentas.');
+    else if (!esDeMovimiento(db, t[k])) e.push('La cuenta ' + t[k] + ' tiene subcuentas; elija una cuenta de movimiento.');
+  });
+  if ((t.tipos || []).includes('empleado')) {
+    const em = t.empleado || {};
+    if (!TIPOS_TRABAJADOR[em.tipoTrabajador]) e.push('Empleado: elija el tipo de trabajador.');
+    if (!TIPOS_CONTRATO[em.tipoContrato]) e.push('Empleado: elija el tipo de contrato.');
+    if (!PERIODICIDADES[em.periodicidad]) e.push('Empleado: elija la periodicidad de pago.');
+    if (!(Number(em.salario) > 0)) e.push('Empleado: escriba el salario.');
+    if (!isISODate(em.fechaInicio)) e.push('Empleado: indique la fecha de inicio del contrato.');
+    if (em.tipoContrato === '1' && em.fechaFin && em.fechaFin <= em.fechaInicio) e.push('Empleado: la fecha de terminación debe ser posterior al inicio.');
+  }
+  return e;
+}
+
+/** Retenciones e IVA sugeridos para una factura de este proveedor (ficha del tercero › configuración general). */
+function impuestosSugeridos(db, t) {
+  const ret = Object.assign({ retefuentePct: 0, reteivaPct: 0, reteicaPct: 0 }, ((db.config || {}).contabilidad || {}).retenciones || {});
+  const x = t ? normalizarTercero(t) : {};
+  const resp = x.responsabilidades || [];
+  const num = (v, d) => (v === '' || v === undefined || v === null ? d : Number(v));
+  return {
+    ivaPct: x.responsableIva === false ? 0 : 19,
+    retefuentePct: resp.includes('O-15') ? 0 : num(x.retefuentePct, Number(ret.retefuentePct) || 0),
+    reteivaPct: x.responsableIva === false ? 0 : Number(ret.reteivaPct) || 0,
+    reteicaPct: num(x.reteicaPct, Number(ret.reteicaPct) || 0)
+  };
+}
 
 /** Dígito de verificación del NIT según el método de la DIAN (módulo 11). */
 function calcularDV(nit) {
@@ -612,6 +736,12 @@ function normalizarTercero(t) {
     if (m && (x.dv === undefined || x.dv === '')) x.dv = m[2];
   }
   if ((x.tipoDoc === 'NIT') && (x.dv === undefined || x.dv === '')) x.dv = calcularDV(x.nit);
+  if (x.regimen) x.responsableIva = !['noResponsable', 'noContribuyente'].includes(x.regimen);
+  else x.regimen = x.responsableIva === false ? 'noResponsable' : 'responsable';
+  if (!x.pais) x.pais = 'Colombia';
+  const nom = nombreTercero(x);
+  if (nom) x.nombre = nom;
+  if (x.persona !== 'natural' && !x.razonSocial) x.razonSocial = x.nombre || '';
   return x;
 }
 
@@ -1671,7 +1801,7 @@ export {
   baseLinea, pendientesPorFacturar, calcularFactura, validarFactura, validarComprobanteManual,
   balanceComprobacion, estadoCosto, COLUMNAS_INTERFAZ, archivoInterfaz, interpretarPlanCuentas, interpretarTerceros,
   NIVELES_GRUPO, TIPOS_MATERIAL, nivelGrupo, rutaGrupo, gruposDescendientes, arbolGrupos, lineasMovimiento,
-  TIPOS_DOC, TIPOS_TERCERO, calcularDV, documentoTercero, normalizarTercero,
+  TIPOS_DOC, TIPOS_TERCERO, SEXOS, REGIMENES, RESPONSABILIDADES, MEDIOS_PAGO, PLAZOS_PAGO, TIPOS_CUENTA_BANCO, TIPOS_TRABAJADOR, SUBTIPOS_TRABAJADOR, TIPOS_CONTRATO, PERIODICIDADES, DEPARTAMENTOS, nombreTercero, partirNombre, validarTercero, impuestosSugeridos, calcularDV, documentoTercero, normalizarTercero,
   TIPOS_BODEGA, sincronizarBodegas, renombrarBodega, bodegaEnUso,
   ESTADOS_LOTE, claveLote, buscarLote, asegurarLotes,
   r2, daysBetween, addDays, todayISO, yearOf, isISODate,
