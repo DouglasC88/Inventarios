@@ -50,7 +50,7 @@ const TIPOS_MOV = {
 };
 const PREFIJOS = {
   inicial: 'SI', entrada: 'EN', salida: 'SA', traslado: 'TR', devolucion: 'DV', ajuste: 'AJ', baja: 'BA',
-  conteo: 'CF', cierre: 'CI', orden: 'OC', requisicion: 'RQ'
+  conteo: 'CF', cierre: 'CI', orden: 'OC', requisicion: 'RQ', factura: 'FP', manual: 'CM'
 };
 const ENTRAN = ['inicial', 'entrada'];
 const SALEN = ['salida', 'baja', 'devolucion'];
@@ -61,7 +61,8 @@ const ROLES = {
   supervisor: 'Supervisor',
   almacenista: 'Almacenista',
   consultorio: 'Consultorio',
-  consulta: 'Consulta (contador o auditor)'
+  contador: 'Contador',
+  consulta: 'Consulta (auditor o revisor fiscal)'
 };
 const PERMISOS = {
   entradas: ['admin', 'supervisor', 'almacenista'],
@@ -80,9 +81,10 @@ const PERMISOS = {
   anular: ['admin', 'supervisor'],
   maestros: ['admin', 'supervisor', 'almacenista'],
   frio: ['admin', 'supervisor', 'almacenista', 'consultorio'],
-  importar: ['admin'],
+  importar: ['admin', 'contador'],
   config: ['admin'],
-  usuarios: ['admin']
+  usuarios: ['admin'],
+  contabilidad: ['admin', 'supervisor', 'contador']
 };
 function puede(usuario, accion) {
   if (!usuario) return true; // sin usuarios configurados: acceso total
@@ -156,7 +158,7 @@ function dbVacia() {
     config: configBase(),
     productos: [], proveedores: [], movimientos: [], conteos: [], cierres: [],
     temperaturas: [], auditoria: [], ordenes: [], requisiciones: [], kits: [], usuarios: [],
-    servicios: [],
+    servicios: [], facturasProveedor: [], comprobantesManuales: [], planCuentas: planCuentasBase(),
     bodegas: [{ id: 'b-principal', codigo: 'BP', nombre: 'Bodega principal', tipo: 'bodega', responsable: '', sede: '', activa: true }],
     grupos: [], lotes: [],
     seq: { orden: 0 }
@@ -164,9 +166,46 @@ function dbVacia() {
 }
 
 // ---------- Contabilidad (PUC colombiano, cuentas configurables) ----------
+// Plan de cuentas base (subconjunto del PUC, Decreto 2650 de 1993). El cliente puede editarlo o cargar el suyo.
+// [código, nombre, naturaleza D/C, maneja tercero]
+const PUC_BASE = [
+  ['1', 'ACTIVO', 'D'], ['11', 'DISPONIBLE', 'D'], ['1105', 'Caja', 'D'], ['1110', 'Bancos', 'D', true],
+  ['14', 'INVENTARIOS', 'D'], ['1435', 'Mercancías no fabricadas por la empresa', 'D'], ['1455', 'Materiales, repuestos y accesorios', 'D'], ['1499', 'Provisiones', 'C'],
+  ['2', 'PASIVO', 'C'], ['22', 'PROVEEDORES', 'C'], ['2205', 'Nacionales', 'C', true],
+  ['23', 'CUENTAS POR PAGAR', 'C'], ['2335', 'Costos y gastos por pagar', 'C', true], ['233595', 'Otros (mercancía recibida por facturar)', 'C', true],
+  ['2365', 'Retención en la fuente', 'C', true], ['236540', 'Compras', 'C', true], ['2367', 'Impuesto a las ventas retenido', 'C', true], ['2368', 'Impuesto de industria y comercio retenido', 'C', true],
+  ['24', 'IMPUESTOS, GRAVÁMENES Y TASAS', 'C'], ['2408', 'Impuesto sobre las ventas por pagar', 'C', true],
+  ['3', 'PATRIMONIO', 'C'], ['37', 'RESULTADOS DE EJERCICIOS ANTERIORES', 'C'], ['3705', 'Utilidades acumuladas', 'C'],
+  ['4', 'INGRESOS', 'C'], ['42', 'NO OPERACIONALES', 'C'], ['4250', 'Recuperaciones', 'C'], ['4295', 'Diversos', 'C'],
+  ['5', 'GASTOS', 'D'], ['51', 'OPERACIONALES DE ADMINISTRACIÓN', 'D'], ['5199', 'Provisiones', 'D'], ['53', 'NO OPERACIONALES', 'D'], ['5315', 'Gastos extraordinarios', 'D'],
+  ['6', 'COSTOS DE VENTAS', 'D'], ['61', 'COSTO DE VENTAS Y DE PRESTACIÓN DE SERVICIOS', 'D'], ['6135', 'Comercio al por mayor y al por menor', 'D'], ['6155', 'Servicios sociales y de salud', 'D']
+];
+const NIVELES_CUENTA = { 1: 'Clase', 2: 'Grupo', 3: 'Cuenta', 4: 'Subcuenta', 5: 'Auxiliar' };
+function nivelCuenta(codigo) {
+  const n = String(codigo || '').length;
+  return n <= 1 ? 1 : n <= 2 ? 2 : n <= 4 ? 3 : n <= 6 ? 4 : 5;
+}
+/** Plan base: las cuentas de 4 o más dígitos reciben movimiento; las demás solo agrupan. */
+function planCuentasBase() {
+  return PUC_BASE.map(([codigo, nombre, naturaleza, terceros]) => ({ codigo, nombre, naturaleza, terceros: !!terceros, movimiento: codigo.length >= 4, activa: true }));
+}
+function cuentaPlan(db, codigo) { return (db.planCuentas || []).find((c) => c.codigo === String(codigo)) || null; }
+/** Una cuenta solo recibe movimiento si no tiene subcuentas activas. */
+function esDeMovimiento(db, codigo) {
+  const c = cuentaPlan(db, codigo);
+  if (!c || c.activa === false) return false;
+  return !(db.planCuentas || []).some((x) => x.codigo !== c.codigo && x.activa !== false && x.codigo.startsWith(c.codigo));
+}
+
 const CONCEPTOS_CONTABLES = {
   inventario: 'Inventario de materiales e insumos',
-  proveedores: 'Proveedores nacionales (compras)',
+  puente: 'Mercancía recibida por facturar (cuenta puente)',
+  proveedores: 'Proveedores nacionales',
+  ivaDescontable: 'IVA descontable en compras',
+  retefuente: 'Retención en la fuente por compras',
+  reteiva: 'Retención de IVA (ReteIVA)',
+  reteica: 'Retención de industria y comercio (ReteICA)',
+  difPrecio: 'Diferencias en precio de compra',
   costosAdic: 'Fletes y costos adicionales por pagar',
   costoConsumo: 'Costo por consumo en servicios de salud',
   costoVenta: 'Costo de venta de insumos',
@@ -178,50 +217,160 @@ const CONCEPTOS_CONTABLES = {
   apertura: 'Contrapartida de saldos iniciales'
 };
 function cuentasBase() {
+  const c = (cuenta, nombre) => ({ cuenta, nombre });
   return {
-    inventario: { cuenta: '1455', nombre: 'Materiales, repuestos y accesorios' },
-    proveedores: { cuenta: '2205', nombre: 'Proveedores nacionales' },
-    costosAdic: { cuenta: '2335', nombre: 'Costos y gastos por pagar' },
-    costoConsumo: { cuenta: '6155', nombre: 'Servicios sociales y de salud' },
-    costoVenta: { cuenta: '6135', nombre: 'Comercio al por mayor y al por menor' },
-    faltantes: { cuenta: '5315', nombre: 'Gastos extraordinarios' },
-    sobrantes: { cuenta: '4295', nombre: 'Diversos' },
-    deterioroGasto: { cuenta: '5199', nombre: 'Provisiones' },
-    deterioroInv: { cuenta: '1499', nombre: 'Provisiones' },
-    recuperacion: { cuenta: '4250', nombre: 'Recuperaciones' },
-    apertura: { cuenta: '3705', nombre: 'Utilidades acumuladas' },
-    centroCostoPorBodega: true
+    inventario: c('1455', 'Materiales, repuestos y accesorios'),
+    puente: c('233595', 'Otros (mercancía recibida por facturar)'),
+    proveedores: c('2205', 'Nacionales'),
+    ivaDescontable: c('2408', 'Impuesto sobre las ventas por pagar'),
+    retefuente: c('236540', 'Compras'),
+    reteiva: c('2367', 'Impuesto a las ventas retenido'),
+    reteica: c('2368', 'Impuesto de industria y comercio retenido'),
+    difPrecio: c('6155', 'Servicios sociales y de salud'),
+    costosAdic: c('2335', 'Costos y gastos por pagar'),
+    costoConsumo: c('6155', 'Servicios sociales y de salud'),
+    costoVenta: c('6135', 'Comercio al por mayor y al por menor'),
+    faltantes: c('5315', 'Gastos extraordinarios'),
+    sobrantes: c('4295', 'Diversos'),
+    deterioroGasto: c('5199', 'Provisiones'),
+    deterioroInv: c('1499', 'Provisiones'),
+    recuperacion: c('4250', 'Recuperaciones'),
+    apertura: c('3705', 'Utilidades acumuladas'),
+    centroCostoPorBodega: true,
+    usarPuente: true,
+    retenciones: { retefuentePct: 2.5, reteivaPct: 15, reteicaPct: 0 }
   };
 }
 /** Cuenta de un concepto; la clasificación del producto (o su línea/grupo padre) puede tener su propia cuenta. */
 function cuentaDe(db, concepto, producto) {
-  const base = Object.assign(cuentasBase(), db.config.contabilidad || {});
+  const base = Object.assign(cuentasBase(), (db.config && db.config.contabilidad) || {});
+  const nombrePlan = (cod, def) => { const c = cuentaPlan(db, cod); return c ? c.nombre : def; };
   let g = producto ? db.grupos.find((x) => x.id === producto.grupoId) : null, guard = 0;
   while (g && guard++ < 10) {
-    if (g.cuentas && g.cuentas[concepto]) return { cuenta: g.cuentas[concepto], nombre: (base[concepto] || {}).nombre + ' · ' + g.nombre };
+    if (g.cuentas && g.cuentas[concepto]) return { cuenta: g.cuentas[concepto], nombre: nombrePlan(g.cuentas[concepto], (base[concepto] || {}).nombre + ' · ' + g.nombre) };
     g = g.parentId ? db.grupos.find((x) => x.id === g.parentId) : null;
   }
-  return base[concepto] || { cuenta: '', nombre: concepto };
+  const b = base[concepto] || { cuenta: '', nombre: concepto };
+  return { cuenta: b.cuenta, nombre: nombrePlan(b.cuenta, b.nombre) };
 }
 
-/** Comprobantes contables generados por los movimientos de inventario y los cierres. */
+// ---------- Facturas de proveedor (verificación de facturas: orden de compra · entrada · factura) ----------
+/** Base de cada línea de entrada (cantidad × costo unitario, sin costos adicionales). */
+function baseLinea(l) { return r2(Number(l.cantidad) * Number(l.costoUnit || 0)); }
+function lineasFacturadas(db, exceptoId) {
+  const s = new Set();
+  (db.facturasProveedor || []).forEach((f) => { if (!f.anulado && f.id !== exceptoId) f.lineas.forEach((l) => s.add(l.movId + '#' + l.idx)); });
+  return s;
+}
+/** Entradas (o líneas) recibidas que aún no tienen factura del proveedor. Es el análisis de la cuenta puente. */
+function pendientesPorFacturar(db, proveedorId) {
+  const fact = lineasFacturadas(db);
+  const out = [];
+  ordenar(db.movimientos).forEach((m) => {
+    if (m.anulado || m.tipo !== 'entrada' || (proveedorId && m.proveedorId !== proveedorId)) return;
+    m.lineas.forEach((l, idx) => {
+      if (fact.has(m.id + '#' + idx)) return;
+      out.push({ movId: m.id, idx, num: m.num, fecha: m.fecha, proveedorId: m.proveedorId, docNum: m.docNum, ordenNum: m.ordenNum || '', productoId: l.productoId, lote: l.lote, cantidad: Number(l.cantidad), costoUnit: Number(l.costoUnit || 0), valor: baseLinea(l) });
+    });
+  });
+  return out;
+}
+/** Totales de una factura: diferencia de precio frente a lo recibido, IVA y retenciones. */
+function calcularFactura(f) {
+  const recibido = r2(f.lineas.reduce((s, l) => s + Number(l.valorRecibido || 0), 0));
+  const subtotal = r2(f.lineas.reduce((s, l) => s + Number(l.valorFacturado || 0), 0));
+  const iva = f.iva !== undefined && f.iva !== '' ? r2(f.iva) : r2(subtotal * (Number(f.ivaPct) || 0) / 100);
+  const retefuente = r2(subtotal * (Number(f.retefuentePct) || 0) / 100);
+  const reteiva = r2(iva * (Number(f.reteivaPct) || 0) / 100);
+  const reteica = r2(subtotal * (Number(f.reteicaPct) || 0) / 100);
+  return { recibido, subtotal, difPrecio: r2(subtotal - recibido), iva, retefuente, reteiva, reteica, total: r2(subtotal + iva - retefuente - reteiva - reteica) };
+}
+function validarFactura(db, f, hoy) {
+  const e = [];
+  hoy = hoy || todayISO();
+  if (!isISODate(f.fecha)) e.push('La fecha de la factura no es válida.');
+  else if (f.fecha > hoy) e.push('La fecha no puede ser futura.');
+  const uc = ultimoCierre(db);
+  if (uc && f.fecha <= uc.fecha) e.push('El periodo está cerrado hasta ' + uc.fecha + '.');
+  if (!f.proveedorId || !db.proveedores.some((t) => t.id === f.proveedorId)) e.push('Seleccione el proveedor.');
+  if (!DOC_TIPOS[f.docTipo]) e.push('Indique si es factura electrónica o documento soporte.');
+  if (!String(f.docNum || '').trim()) e.push('Escriba el número de la factura o documento soporte.');
+  else if ((db.facturasProveedor || []).some((x) => !x.anulado && x.id !== f.id && x.proveedorId === f.proveedorId && String(x.docNum).trim().toUpperCase() === String(f.docNum).trim().toUpperCase())) e.push('Esa factura ya está registrada para este proveedor.');
+  if (!f.lineas || !f.lineas.length) e.push('Seleccione al menos una línea recibida para facturar.');
+  const fact = lineasFacturadas(db, f.id);
+  (f.lineas || []).forEach((l) => {
+    const m = db.movimientos.find((x) => x.id === l.movId);
+    if (!m || m.anulado || m.tipo !== 'entrada') e.push('Una línea no corresponde a una entrada vigente.');
+    else if (m.proveedorId !== f.proveedorId) e.push(m.num + ' es de otro proveedor.');
+    else if (fact.has(l.movId + '#' + l.idx)) e.push(m.num + ': la línea ya fue facturada.');
+    if (Number(l.valorFacturado) < 0) e.push('El valor facturado no puede ser negativo.');
+  });
+  ['ivaPct', 'retefuentePct', 'reteivaPct', 'reteicaPct'].forEach((k) => { if (f[k] !== '' && f[k] !== undefined && !(Number(f[k]) >= 0 && Number(f[k]) <= 100)) e.push('Los porcentajes deben estar entre 0 y 100.'); });
+  return e;
+}
+
+// ---------- Comprobantes manuales ----------
+function validarComprobanteManual(db, cp, hoy) {
+  const e = [];
+  hoy = hoy || todayISO();
+  if (!isISODate(cp.fecha)) e.push('La fecha no es válida.');
+  else if (cp.fecha > hoy) e.push('La fecha no puede ser futura.');
+  const uc = ultimoCierre(db);
+  if (uc && cp.fecha <= uc.fecha) e.push('El periodo está cerrado hasta ' + uc.fecha + '.');
+  if (!String(cp.descripcion || '').trim()) e.push('Escriba la descripción del comprobante.');
+  const ls = (cp.lineas || []).filter((l) => l.cuenta || Number(l.debito) || Number(l.credito));
+  if (ls.length < 2) e.push('Un comprobante necesita al menos dos líneas.');
+  ls.forEach((l, i) => {
+    const n = 'Línea ' + (i + 1) + ': ';
+    const c = cuentaPlan(db, l.cuenta);
+    if (!c) e.push(n + 'la cuenta ' + (l.cuenta || '') + ' no existe en el plan de cuentas.');
+    else if (!esDeMovimiento(db, l.cuenta)) e.push(n + 'la cuenta ' + l.cuenta + ' es de agrupación; use una subcuenta de movimiento.');
+    else if (c.terceros && !String(l.tercero || '').trim()) e.push(n + 'la cuenta ' + l.cuenta + ' exige tercero (NIT).');
+    const d = Number(l.debito) || 0, cr = Number(l.credito) || 0;
+    if (d < 0 || cr < 0) e.push(n + 'los valores no pueden ser negativos.');
+    if ((d > 0) === (cr > 0)) e.push(n + 'escriba un valor en débito o en crédito, no en ambos.');
+  });
+  const td = r2(ls.reduce((s, l) => s + (Number(l.debito) || 0), 0)), tc = r2(ls.reduce((s, l) => s + (Number(l.credito) || 0), 0));
+  if (Math.abs(td - tc) >= 0.01) e.push('El comprobante no cuadra: débitos ' + td + ' y créditos ' + tc + '.');
+  return e;
+}
+
+/** Comprobantes contables: movimientos de inventario, facturas de proveedor, cierres y comprobantes manuales. Los anulados generan su reversión. */
 function comprobantesContables(db, state, f) {
   f = f || {};
   const cfg = Object.assign(cuentasBase(), db.config.contabilidad || {});
   const out = [];
   const nit = (id) => { const t = db.proveedores.find((x) => x.id === id); return t ? String(t.nit || '') : ''; };
   const cc = (b) => (cfg.centroCostoPorBodega ? ((db.bodegas.find((x) => x.nombre === b) || {}).codigo || b) : '');
-  for (const m of ordenar(db.movimientos)) {
-    if (m.anulado || (f.desde && m.fecha < f.desde) || (f.hasta && m.fecha > f.hasta) || m.tipo === 'traslado') continue;
-    const c = state.movCost[m.id];
-    if (!c) continue;
+  const nuevo = () => {
     const lineas = [];
     const add = (concepto, producto, debito, credito, tercero, centro, detalle) => {
+      debito = r2(debito); credito = r2(credito);
+      if (!debito && !credito) return;
       const cu = cuentaDe(db, concepto, producto);
-      const ex = lineas.find((x) => x.cuenta === cu.cuenta && x.tercero === tercero && x.centro === centro && (debito > 0) === (x.debito > 0));
+      const ex = lineas.find((x) => x.cuenta === cu.cuenta && x.tercero === (tercero || '') && x.centro === (centro || '') && (debito > 0) === (x.debito > 0) && x.detalle === detalle);
       if (ex) { ex.debito = r2(ex.debito + debito); ex.credito = r2(ex.credito + credito); return; }
-      lineas.push({ cuenta: cu.cuenta, nombre: cu.nombre, concepto, debito: r2(debito), credito: r2(credito), tercero: tercero || '', centro: centro || '', detalle });
+      lineas.push({ cuenta: cu.cuenta, nombre: cu.nombre, concepto, debito, credito, tercero: tercero || '', centro: centro || '', detalle });
     };
+    return { lineas, add };
+  };
+  const emitir = (base, lineas, anulacion) => {
+    if (!lineas.length) return;
+    out.push(Object.assign({}, base, { lineas }));
+    if (anulacion) {
+      out.push(Object.assign({}, base, {
+        id: base.id + '-R', num: base.num + '-R', fecha: String(anulacion.fecha || base.fecha).slice(0, 10), tipo: 'Reversión ' + base.tipo.toLowerCase(),
+        descripcion: 'Anulación de ' + base.documento + (anulacion.motivo ? ': ' + anulacion.motivo : ''), reversion: true,
+        lineas: lineas.map((l) => Object.assign({}, l, { debito: l.credito, credito: l.debito, detalle: 'Reversión · ' + l.detalle }))
+      }));
+    }
+  };
+  const replayConAnulados = replay(Object.assign({}, db, { movimientos: db.movimientos.map((m) => (m.anulado ? Object.assign({}, m, { anulado: false }) : m)) }));
+  for (const m of ordenar(db.movimientos)) {
+    if (m.tipo === 'traslado') continue;
+    const c = m.anulado ? replayConAnulados.movCost[m.id] : state.movCost[m.id];
+    if (!c) continue;
+    const { lineas, add } = nuevo();
     m.lineas.forEach((l, i) => {
       const p = db.productos.find((x) => x.id === l.productoId);
       const v = c.lineas[i].valor;
@@ -229,17 +378,19 @@ function comprobantesContables(db, state, f) {
       const b = l.bodega || bodegaDe(m, db.config);
       const q = Number(l.cantidad);
       if (m.tipo === 'entrada') {
-        const base = Number(l.cantidad) * Number(l.costoUnit || 0);
-        add('inventario', p, v, 0, '', cc(b), 'Compra ' + m.docTipo + ' ' + m.docNum);
-        add('proveedores', p, 0, r2(base), nit(m.proveedorId), '', 'Compra ' + m.docTipo + ' ' + m.docNum);
+        const base = baseLinea(l);
+        add('inventario', p, v, 0, '', cc(b), 'Entrada ' + m.num);
+        if (cfg.usarPuente) add('puente', p, 0, base, nit(m.proveedorId), '', 'Recibido por facturar ' + m.docTipo + ' ' + m.docNum);
+        else add('proveedores', p, 0, base, nit(m.proveedorId), '', 'Compra ' + m.docTipo + ' ' + m.docNum);
         if (r2(v - base) > 0) add('costosAdic', p, 0, r2(v - base), '', '', 'Costos adicionales de la compra');
       } else if (m.tipo === 'inicial') {
         add('inventario', p, v, 0, '', cc(b), 'Saldo inicial'); add('apertura', p, 0, v, '', '', 'Saldo inicial');
       } else if (m.tipo === 'salida') {
-        add(m.destinoTipo === 'Venta' ? 'costoVenta' : 'costoConsumo', p, v, 0, '', cc(b), (m.destinoTipo || 'Salida') + ': ' + (m.destino || '') + (m.procedimiento ? ' · ' + m.procedimiento : ''));
+        add(m.destinoTipo === 'Venta' ? 'costoVenta' : 'costoConsumo', p, v, 0, '', cc(b), (m.destinoTipo || 'Salida') + (m.procedimiento ? ' · ' + m.procedimiento : ''));
         add('inventario', p, 0, v, '', cc(b), 'Salida de inventario');
       } else if (m.tipo === 'devolucion') {
-        add('proveedores', p, v, 0, nit(m.proveedorId), '', 'Devolución ' + (m.docNum || ''));
+        // La devolución queda a cargo del proveedor (nota crédito por recibir); la cuenta puente solo cruza entradas y facturas.
+        add('proveedores', p, v, 0, nit(m.proveedorId), '', 'Devolución ' + (m.docNum || '') + ' · nota crédito por recibir');
         add('inventario', p, 0, v, '', cc(b), 'Devolución a proveedor');
       } else if (m.tipo === 'baja' || (m.tipo === 'ajuste' && q < 0)) {
         add('faltantes', p, v, 0, '', cc(b), m.tipo === 'baja' ? 'Baja: ' + (CAUSAS_BAJA[m.causa] || '') : 'Ajuste: ' + (CAUSAS_AJUSTE[l.causa] || ''));
@@ -249,25 +400,44 @@ function comprobantesContables(db, state, f) {
         add('sobrantes', p, 0, v, '', cc(b), 'Ajuste: ' + (CAUSAS_AJUSTE[l.causa] || ''));
       }
     });
-    if (!lineas.length) continue;
-    out.push({ id: m.id, fecha: m.fecha, num: 'CT-' + m.num, documento: m.num, tipo: TIPOS_MOV[m.tipo], descripcion: detalleMov(db, m, m.lineas[0]), lineas });
+    emitir({ id: m.id, fecha: m.fecha, num: 'CT-' + m.num, documento: m.num, tipo: TIPOS_MOV[m.tipo], origen: 'inventario', descripcion: detalleMov(db, m, m.lineas[0]) }, lineas, m.anulado ? m.anulacion || {} : null);
   }
-  db.cierres.forEach((ci) => {
-    if ((f.desde && ci.fecha < f.desde) || (f.hasta && ci.fecha > f.hasta)) return;
-    const lineas = [];
-    if (ci.nuevoDeterioro > 0) {
-      lineas.push({ cuenta: cuentaDe(db, 'deterioroGasto').cuenta, nombre: cuentaDe(db, 'deterioroGasto').nombre, concepto: 'deterioroGasto', debito: ci.nuevoDeterioro, credito: 0, tercero: '', centro: '', detalle: 'Deterioro por VNR (NIC 2)' });
-      lineas.push({ cuenta: cuentaDe(db, 'deterioroInv').cuenta, nombre: cuentaDe(db, 'deterioroInv').nombre, concepto: 'deterioroInv', debito: 0, credito: ci.nuevoDeterioro, tercero: '', centro: '', detalle: 'Deterioro por VNR (NIC 2)' });
-    }
-    if (ci.reversion > 0) {
-      lineas.push({ cuenta: cuentaDe(db, 'deterioroInv').cuenta, nombre: cuentaDe(db, 'deterioroInv').nombre, concepto: 'deterioroInv', debito: ci.reversion, credito: 0, tercero: '', centro: '', detalle: 'Reversión de deterioro' });
-      lineas.push({ cuenta: cuentaDe(db, 'recuperacion').cuenta, nombre: cuentaDe(db, 'recuperacion').nombre, concepto: 'recuperacion', debito: 0, credito: ci.reversion, tercero: '', centro: '', detalle: 'Reversión de deterioro' });
-    }
-    if (lineas.length) out.push({ id: ci.id, fecha: ci.fecha, num: 'CT-' + ci.num, documento: ci.num, tipo: 'Cierre', descripcion: 'Ajuste por valor neto realizable', lineas });
+  (db.facturasProveedor || []).forEach((fp) => {
+    const { lineas, add } = nuevo();
+    const t = calcularFactura(fp);
+    const n = nit(fp.proveedorId);
+    const ref = fp.docTipo + ' ' + fp.docNum;
+    fp.lineas.forEach((l) => {
+      const p = db.productos.find((x) => x.id === l.productoId);
+      add(cfg.usarPuente ? 'puente' : 'inventario', p, Number(l.valorRecibido) || 0, 0, cfg.usarPuente ? n : '', '', 'Recibido ' + (l.num || ''));
+      const dif = r2(Number(l.valorFacturado || 0) - Number(l.valorRecibido || 0));
+      if (dif > 0) add('difPrecio', p, dif, 0, '', '', 'Diferencia de precio ' + ref);
+      if (dif < 0) add('difPrecio', p, 0, -dif, '', '', 'Diferencia de precio ' + ref);
+    });
+    add('ivaDescontable', null, t.iva, 0, n, '', 'IVA ' + ref);
+    add('retefuente', null, 0, t.retefuente, n, '', 'Retención en la fuente ' + ref);
+    add('reteiva', null, 0, t.reteiva, n, '', 'ReteIVA ' + ref);
+    add('reteica', null, 0, t.reteica, n, '', 'ReteICA ' + ref);
+    add('proveedores', null, 0, t.total, n, '', 'Factura ' + ref);
+    emitir({ id: fp.id, fecha: fp.fecha, num: 'CT-' + fp.num, documento: fp.num, tipo: 'Factura de proveedor', origen: 'compras', descripcion: (db.proveedores.find((x) => x.id === fp.proveedorId) || {}).nombre + ' · ' + ref }, lineas, fp.anulado ? fp.anulacion || {} : null);
   });
-  out.sort((a, b) => (a.fecha < b.fecha ? -1 : a.fecha > b.fecha ? 1 : 0));
-  out.forEach((cp) => { cp.debito = r2(cp.lineas.reduce((a, x) => a + x.debito, 0)); cp.credito = r2(cp.lineas.reduce((a, x) => a + x.credito, 0)); cp.cuadra = Math.abs(cp.debito - cp.credito) < 0.01; });
-  return out;
+  db.cierres.forEach((ci) => {
+    const { lineas, add } = nuevo();
+    if (ci.nuevoDeterioro > 0) { add('deterioroGasto', null, ci.nuevoDeterioro, 0, '', '', 'Deterioro por VNR (NIC 2)'); add('deterioroInv', null, 0, ci.nuevoDeterioro, '', '', 'Deterioro por VNR (NIC 2)'); }
+    if (ci.reversion > 0) { add('deterioroInv', null, ci.reversion, 0, '', '', 'Reversión de deterioro'); add('recuperacion', null, 0, ci.reversion, '', '', 'Reversión de deterioro'); }
+    emitir({ id: ci.id || ci.num, fecha: ci.fecha, num: 'CT-' + ci.num, documento: ci.num, tipo: 'Cierre', origen: 'cierre', descripcion: 'Ajuste por valor neto realizable' }, lineas, null);
+  });
+  (db.comprobantesManuales || []).forEach((cm) => {
+    const lineas = cm.lineas.filter((l) => Number(l.debito) || Number(l.credito)).map((l) => {
+      const c = cuentaPlan(db, l.cuenta);
+      return { cuenta: l.cuenta, nombre: c ? c.nombre : '', concepto: 'manual', debito: r2(Number(l.debito) || 0), credito: r2(Number(l.credito) || 0), tercero: l.tercero || '', centro: l.centro || '', detalle: l.detalle || cm.descripcion };
+    });
+    emitir({ id: cm.id, fecha: cm.fecha, num: cm.num, documento: cm.num, tipo: 'Comprobante manual', origen: 'manual', descripcion: cm.descripcion }, lineas, cm.anulado ? cm.anulacion || {} : null);
+  });
+  const sel = out.filter((cp) => (!f.desde || cp.fecha >= f.desde) && (!f.hasta || cp.fecha <= f.hasta) && (!f.origenes || f.origenes.includes(cp.origen)));
+  sel.sort((a, b) => (a.fecha < b.fecha ? -1 : a.fecha > b.fecha ? 1 : 0));
+  sel.forEach((cp) => { cp.debito = r2(cp.lineas.reduce((a, x) => a + x.debito, 0)); cp.credito = r2(cp.lineas.reduce((a, x) => a + x.credito, 0)); cp.cuadra = Math.abs(cp.debito - cp.credito) < 0.01; });
+  return sel;
 }
 
 /** Saldo de cada cuenta en los comprobantes (para auxiliares y conciliación). */
@@ -278,6 +448,138 @@ function saldosContables(comprobantes) {
     x.debito = r2(x.debito + l.debito); x.credito = r2(x.credito + l.credito);
   }));
   return Object.values(s).map((x) => Object.assign(x, { saldo: r2(x.debito - x.credito) })).sort((a, b) => a.cuenta.localeCompare(b.cuenta));
+}
+
+/** Libro mayor y balances: saldo anterior, débitos, créditos y saldo final por cuenta, consolidado al nivel pedido. */
+function balanceComprobacion(db, comprobantes, desde, hasta, nivel) {
+  nivel = Number(nivel) || 5;
+  const largo = { 1: 1, 2: 2, 3: 4, 4: 6, 5: 99 }[nivel];
+  const filas = {};
+  const nombre = (cod) => { const c = cuentaPlan(db, cod); return c ? c.nombre : ''; };
+  comprobantes.forEach((cp) => cp.lineas.forEach((l) => {
+    const cod = String(l.cuenta).slice(0, largo);
+    const x = filas[cod] || (filas[cod] = { cuenta: cod, nombre: nombre(cod) || l.nombre, anterior: 0, debito: 0, credito: 0 });
+    if (cp.fecha < desde) x.anterior = r2(x.anterior + l.debito - l.credito);
+    else if (cp.fecha <= hasta) { x.debito = r2(x.debito + l.debito); x.credito = r2(x.credito + l.credito); }
+  }));
+  return Object.values(filas).map((x) => Object.assign(x, { final: r2(x.anterior + x.debito - x.credito), nivel: nivelCuenta(x.cuenta) }))
+    .filter((x) => x.anterior || x.debito || x.credito).sort((a, b) => a.cuenta.localeCompare(b.cuenta));
+}
+
+/** Estado de costo de los insumos consumidos (juego de inventarios) para el periodo. */
+function estadoCosto(db, desde, hasta) {
+  const ini = replay(db, { hasta: addDays(desde, -1) });
+  const fin = replay(db, { hasta });
+  const suma = (tipos, signo) => db.movimientos.filter((m) => !m.anulado && m.fecha >= desde && m.fecha <= hasta && tipos.includes(m.tipo))
+    .reduce((s, m) => s + m.lineas.reduce((a, l, i) => a + ((signo === undefined || Math.sign(Number(l.cantidad)) === signo) ? fin.movCost[m.id].lineas[i].valor : 0), 0), 0);
+  const inventarioInicial = valorInventario(ini);
+  const compras = r2(suma(['entrada']));
+  const saldosIniciales = r2(suma(['inicial']));
+  const devoluciones = r2(suma(['devolucion']));
+  const sobrantes = r2(suma(['ajuste'], 1));
+  const faltantes = r2(suma(['ajuste'], -1) + suma(['baja']));
+  const inventarioFinal = valorInventario(fin);
+  const disponible = r2(inventarioInicial + compras + saldosIniciales - devoluciones + sobrantes - faltantes);
+  const consumo = r2(suma(['salida']));
+  return { inventarioInicial, compras, saldosIniciales, devoluciones, sobrantes, faltantes, disponible, inventarioFinal, costoConsumido: r2(disponible - inventarioFinal), consumoRegistrado: consumo };
+}
+
+/** Archivo para el software contable según el diseño configurado (columnas, separador, formato de fecha, resumen). */
+const COLUMNAS_INTERFAZ = {
+  fecha: 'Fecha', comprobante: 'Comprobante', documento: 'Documento origen', tipo: 'Tipo', cuenta: 'Cuenta', nombreCuenta: 'Nombre de la cuenta',
+  nit: 'NIT tercero', centro: 'Centro de costo', debito: 'Débito', credito: 'Crédito', detalle: 'Detalle'
+};
+function archivoInterfaz(comprobantes, d) {
+  d = Object.assign({ columnas: Object.keys(COLUMNAS_INTERFAZ), separador: ';', formatoFecha: 'aaaa-mm-dd', decimal: ',', encabezado: true, resumirPorDia: false }, d || {});
+  const fmtF = (iso) => (d.formatoFecha === 'dd/mm/aaaa' ? iso.slice(8, 10) + '/' + iso.slice(5, 7) + '/' + iso.slice(0, 4) : d.formatoFecha === 'aaaammdd' ? iso.replace(/-/g, '') : iso);
+  const fmtN = (n) => { const s = Number(n || 0).toFixed(2); return d.decimal === ',' ? s.replace('.', ',') : s; };
+  let lineas = comprobantes.flatMap((cp) => cp.lineas.map((l) => ({ fecha: cp.fecha, comprobante: cp.num, documento: cp.documento, tipo: cp.tipo, cuenta: l.cuenta, nombreCuenta: l.nombre, nit: l.tercero, centro: l.centro, debito: l.debito, credito: l.credito, detalle: l.detalle })));
+  if (d.resumirPorDia) {
+    const g = {};
+    lineas.forEach((l) => {
+      const k = [l.fecha, l.cuenta, l.nit, l.centro, l.debito > 0 ? 'D' : 'C'].join('|');
+      const x = g[k] || (g[k] = Object.assign({}, l, { comprobante: 'RES-' + l.fecha.replace(/-/g, ''), documento: 'Resumen diario', tipo: 'Resumen', detalle: 'Resumen de inventario del día', debito: 0, credito: 0 }));
+      x.debito = r2(x.debito + l.debito); x.credito = r2(x.credito + l.credito);
+    });
+    lineas = Object.values(g);
+  }
+  const esc = (v) => { const s = String(v === null || v === undefined ? '' : v); return s.includes(d.separador) || /["\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const filas = lineas.map((l) => d.columnas.map((c) => (c === 'fecha' ? fmtF(l.fecha) : c === 'debito' || c === 'credito' ? fmtN(l[c]) : l[c])).map(esc).join(d.separador));
+  if (d.encabezado) filas.unshift(d.columnas.map((c) => COLUMNAS_INTERFAZ[c]).map(esc).join(d.separador));
+  return '﻿' + filas.join('\r\n');
+}
+
+// ---------- Carga masiva: plan de cuentas y terceros ----------
+function interpretarPlanCuentas(filas) {
+  if (!filas || filas.length < 2) return { errores: ['El archivo no tiene datos.'], cuentas: [] };
+  const enc = filas[0].map(norm);
+  const col = (alias) => enc.findIndex((h) => alias.map(norm).includes(h));
+  const ic = col(['codigo', 'código', 'cuenta', 'codigo cuenta', 'código cuenta']);
+  const inom = col(['nombre', 'descripcion', 'descripción', 'nombre cuenta', 'nombre de la cuenta']);
+  const inat = col(['naturaleza', 'nat']);
+  const iter = col(['tercero', 'terceros', 'maneja tercero', 'nit']);
+  const errores = [];
+  if (ic < 0) errores.push('Falta la columna "Código".');
+  if (inom < 0) errores.push('Falta la columna "Nombre".');
+  if (errores.length) return { errores, cuentas: [] };
+  const vistos = new Set();
+  const cuentas = [];
+  filas.slice(1).forEach((f, i) => {
+    const codigo = String(f[ic] === undefined || f[ic] === null ? '' : f[ic]).replace(/\D/g, '');
+    const nombre = String(f[inom] || '').trim();
+    if (!codigo && !nombre) return;
+    if (!codigo) { errores.push('Fila ' + (i + 2) + ': falta el código.'); return; }
+    if (!nombre) { errores.push('Fila ' + (i + 2) + ': falta el nombre de la cuenta ' + codigo + '.'); return; }
+    if (vistos.has(codigo)) { errores.push('Fila ' + (i + 2) + ': la cuenta ' + codigo + ' está repetida.'); return; }
+    vistos.add(codigo);
+    const natTxt = norm(inat >= 0 ? f[inat] : '');
+    const naturaleza = natTxt.startsWith('c') ? 'C' : natTxt.startsWith('d') ? 'D' : (['2', '3', '4'].includes(codigo[0]) ? 'C' : 'D');
+    const ter = norm(iter >= 0 ? f[iter] : '');
+    cuentas.push({ codigo, nombre, naturaleza, terceros: ['si', 'sí', 's', 'x', '1', 'true'].includes(ter), movimiento: true, activa: true });
+  });
+  cuentas.forEach((c) => { c.movimiento = !cuentas.some((x) => x.codigo !== c.codigo && x.codigo.startsWith(c.codigo)); });
+  return { errores, cuentas: cuentas.sort((a, b) => a.codigo.localeCompare(b.codigo)) };
+}
+
+function interpretarTerceros(filas, db) {
+  if (!filas || filas.length < 2) return { errores: ['El archivo no tiene datos.'], terceros: [] };
+  const enc = filas[0].map(norm);
+  const col = (alias) => enc.findIndex((h) => alias.map(norm).includes(h));
+  const idx = {
+    tipoDoc: col(['tipo documento', 'tipo de documento', 'tipo doc', 'tipodoc']), nit: col(['nit', 'documento', 'numero', 'número', 'identificacion', 'identificación', 'nit o documento']),
+    dv: col(['dv', 'digito', 'dígito', 'digito de verificacion', 'dígito de verificación']), nombre: col(['nombre', 'razon social', 'razón social', 'nombre o razon social', 'nombre o razón social']),
+    tipos: col(['tipo', 'tipo tercero', 'tipo de tercero', 'clase']), direccion: col(['direccion', 'dirección']), ciudad: col(['ciudad', 'municipio']),
+    telefono: col(['telefono', 'teléfono', 'celular']), correo: col(['correo', 'email', 'e-mail', 'correo electronico', 'correo electrónico']), contacto: col(['contacto'])
+  };
+  const errores = [];
+  if (idx.nit < 0) errores.push('Falta la columna "NIT" o "Documento".');
+  if (idx.nombre < 0) errores.push('Falta la columna "Nombre" o "Razón social".');
+  if (errores.length) return { errores, terceros: [] };
+  const v = (f, k) => (idx[k] < 0 ? '' : String(f[idx[k]] === undefined || f[idx[k]] === null ? '' : f[idx[k]]).trim());
+  const terceros = [];
+  const vistos = new Set();
+  filas.slice(1).forEach((f, i) => {
+    const fila = i + 2;
+    const crudo = v(f, 'nit');
+    const nombre = v(f, 'nombre');
+    if (!crudo && !nombre) return;
+    const tdTxt = norm(v(f, 'tipoDoc')).toUpperCase().replace(/\./g, '');
+    const tipoDoc = TIPOS_DOC[tdTxt] ? tdTxt : tdTxt.startsWith('CED') || tdTxt === 'CEDULA' ? 'CC' : 'NIT';
+    const m = crudo.match(/^([\d.\s]+)-(\d)$/);
+    const nit = (m ? m[1] : crudo).replace(/\D/g, '');
+    if (!nit) { errores.push('Fila ' + fila + ': falta el número de documento.'); return; }
+    if (!nombre) { errores.push('Fila ' + fila + ': falta el nombre.'); return; }
+    if (vistos.has(tipoDoc + nit)) { errores.push('Fila ' + fila + ': el documento ' + nit + ' está repetido en el archivo.'); return; }
+    vistos.add(tipoDoc + nit);
+    const dvArch = v(f, 'dv') || (m ? m[2] : '');
+    const dv = tipoDoc === 'NIT' ? calcularDV(nit) : '';
+    if (tipoDoc === 'NIT' && dvArch && dvArch !== dv) errores.push('Fila ' + fila + ': el dígito de verificación de ' + nit + ' debería ser ' + dv + ' (el archivo trae ' + dvArch + ').');
+    const tt = norm(v(f, 'tipos'));
+    const tipos = Object.keys(TIPOS_TERCERO).filter((k) => tt.includes(k) || tt.includes(norm(TIPOS_TERCERO[k])));
+    const existente = db.proveedores.find((x) => (x.tipoDoc || 'NIT') === tipoDoc && String(x.nit) === nit);
+    terceros.push({ fila, existente: !!existente, id: existente ? existente.id : null, tipoDoc, nit, dv, nombre, persona: tipoDoc === 'NIT' ? 'juridica' : 'natural', tipos: tipos.length ? tipos : ['proveedor'], direccion: v(f, 'direccion'), ciudad: v(f, 'ciudad'), telefono: v(f, 'telefono'), correo: v(f, 'correo'), contacto: v(f, 'contacto'), responsableIva: true, obligadoFacturar: tipoDoc === 'NIT', activo: true });
+  });
+  return { errores, terceros };
 }
 
 // ---------- Terceros ----------
@@ -1365,6 +1667,9 @@ function csv(filas) {
 
 export {
   CONCEPTOS_CONTABLES, cuentasBase, cuentaDe, comprobantesContables, saldosContables,
+  PUC_BASE, NIVELES_CUENTA, nivelCuenta, planCuentasBase, cuentaPlan, esDeMovimiento,
+  baseLinea, pendientesPorFacturar, calcularFactura, validarFactura, validarComprobanteManual,
+  balanceComprobacion, estadoCosto, COLUMNAS_INTERFAZ, archivoInterfaz, interpretarPlanCuentas, interpretarTerceros,
   NIVELES_GRUPO, TIPOS_MATERIAL, nivelGrupo, rutaGrupo, gruposDescendientes, arbolGrupos, lineasMovimiento,
   TIPOS_DOC, TIPOS_TERCERO, calcularDV, documentoTercero, normalizarTercero,
   TIPOS_BODEGA, sincronizarBodegas, renombrarBodega, bodegaEnUso,

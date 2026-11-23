@@ -7,7 +7,8 @@ export const USUARIOS_DEMO = [
   ['supervisor', 'Supervisora de inventario', 'supervisor', '1111', ''],
   ['bodega', 'Almacenista', 'almacenista', '2222', ''],
   ['consultorio1', 'Dra. Pérez (Consultorio 1)', 'consultorio', '3333', 'Consultorio 1'],
-  ['contador', 'Contador', 'consulta', '4444', '']
+  ['contador', 'Contador', 'contador', '4444', ''],
+  ['auditor', 'Revisor fiscal', 'consulta', '5555', '']
 ];
 
 export function crearDemo(hoy) {
@@ -108,14 +109,14 @@ export function crearDemo(hoy) {
     { productoId: 'p1', cantidad: 24, costoUnit: 38000 }, { productoId: 'p2', cantidad: 30, costoUnit: 21000 }, { productoId: 'p5', cantidad: 6, costoUnit: 96000 },
     { productoId: 'p8', cantidad: 12, costoUnit: 28000 }, { productoId: 'p10', cantidad: 10, costoUnit: 52000 }] };
   db.ordenes.push(oc1);
-  mov('entrada', d(-150), { proveedorId: 'pv1', docTipo: 'FE', docNum: 'FEDA-10231', costosAdic: 45000, ordenId: 'oc1', ordenNum: oc1.num, nota: 'Compra inicial' }, [
+  const e1 = mov('entrada', d(-150), { proveedorId: 'pv1', docTipo: 'FE', docNum: 'FEDA-10231', costosAdic: 45000, ordenId: 'oc1', ordenNum: oc1.num, nota: 'Compra inicial' }, [
     L('p1', 'RA3-2401', d(150), 24, 38000),
     L('p2', 'GN-7781', d(45), 30, 21000),
     L('p5', 'IV-5520', d(420), 6, 96000),
     L('p8', 'AL-1190', d(-5), 12, 28000),
     L('p10', 'FD-3301', d(900), 10, 52000)
   ]);
-  mov('entrada', d(-140), { proveedorId: 'pv2', docTipo: 'FE', docNum: 'OS-58871', costosAdic: 0 }, [
+  const e2 = mov('entrada', d(-140), { proveedorId: 'pv2', docTipo: 'FE', docNum: 'OS-58871', costosAdic: 0 }, [
     L('p3', 'LD-24A17', d(520), 400, 2360),
     L('p6', 'AG-9031', d(700), 1000, 340),
     L('p7', 'IM-77120', d(1300), 6, 410000)
@@ -179,6 +180,14 @@ export function crearDemo(hoy) {
   });
   db.ordenes.push({ id: 'oc3', num: C.siguienteNumero(db, 'orden'), fecha: d(-3), proveedorId: 'pv2', fechaEntrega: d(7), estado: 'abierta', nota: 'Reposición de implantes', usuario: 'Almacenista', lineas: [
     { productoId: 'p7', cantidad: 4, costoUnit: 415000 }] });
+
+  // Facturas de proveedor (cruce con la entrada). La compra más reciente queda pendiente por facturar.
+  const fp = (id, e, fecha, docNum, ajuste) => {
+    const lineas = e.lineas.map((l, idx) => ({ movId: e.id, idx, num: e.num, productoId: l.productoId, valorRecibido: C.baseLinea(l), valorFacturado: C.r2(C.baseLinea(l) * (ajuste && idx === 0 ? ajuste : 1)) }));
+    db.facturasProveedor.push({ id, num: C.siguienteNumero(db, 'factura'), fecha, proveedorId: e.proveedorId, docTipo: 'FE', docNum, ivaPct: 19, retefuentePct: 2.5, reteivaPct: 15, reteicaPct: 0, lineas, usuario: 'Contador', creado: fecha + 'T11:00:00' });
+  };
+  fp('fp1', e1, d(-148), e1.docNum, 1);
+  fp('fp2', e2, d(-138), e2.docNum, 1.02);
 
   const adh = C.buscarLote(db, 'p9', 'AU-4410');
   adh.estado = 'cuarentena';

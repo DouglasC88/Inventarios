@@ -369,7 +369,7 @@ test('contabilidad: comprobantes cuadrados y cuenta de inventario igual al karde
   assert.ok(Math.abs(inv.saldo - C.valorInventario(st)) < 1, 'saldo 1455 = valor del kardex');
   assert.ok(!det || det.saldo <= 0);
   const compra = cps.find((cp) => cp.tipo === 'Entrada');
-  assert.ok(compra.lineas.some((l) => l.cuenta === '2205' && l.credito > 0 && l.tercero));
+  assert.ok(compra.lineas.some((l) => l.cuenta === '233595' && l.credito > 0 && l.tercero), 'la entrada abona la cuenta puente');
 });
 
 test('cuenta contable propia por clasificación', () => {
@@ -378,4 +378,102 @@ test('cuenta contable propia por clasificación', () => {
   db.productos[0].grupoId = 'g1';
   assert.equal(C.cuentaDe(db, 'inventario', db.productos[0]).cuenta, '143501');
   assert.equal(C.cuentaDe(db, 'proveedores', db.productos[0]).cuenta, '2205');
+});
+
+test('ciclo SAP: entrada a cuenta puente, factura con diferencia de precio, IVA y retenciones', () => {
+  const db = base();
+  db.planCuentas = C.planCuentasBase();
+  const e1 = add(db, ent('2026-03-01', [{ productoId: 'a', lote: 'L1', vence: '2027-01-01', cantidad: 10, costoUnit: 100 }]));
+  let st = C.replay(db);
+  assert.equal(C.pendientesPorFacturar(db).length, 1);
+  const fp = { id: 'f1', num: 'FP-1', fecha: '2026-03-05', proveedorId: 'pv', docTipo: 'FE', docNum: 'FV-9', ivaPct: 19, retefuentePct: 2.5, reteivaPct: 15, reteicaPct: 0,
+    lineas: [{ movId: e1.id, idx: 0, num: e1.num, productoId: 'a', valorRecibido: 1000, valorFacturado: 1050 }] };
+  assert.deepEqual(C.validarFactura(db, fp, HOY), []);
+  const t = C.calcularFactura(fp);
+  assert.equal(t.difPrecio, 50);
+  assert.equal(t.iva, 199.5);
+  assert.equal(t.total, r2(1050 + 199.5 - 26.25 - 29.93));
+  db.facturasProveedor = [fp];
+  assert.equal(C.pendientesPorFacturar(db).length, 0);
+  assert.ok(C.validarFactura(db, Object.assign({}, fp, { id: 'f2' }), HOY).some((x) => x.includes('ya')));
+  st = C.replay(db);
+  const cps = C.comprobantesContables(db, st);
+  cps.forEach((cp) => assert.ok(cp.cuadra, cp.num));
+  const saldos = C.saldosContables(cps);
+  const puente = saldos.find((x) => x.cuenta === '233595');
+  assert.equal(puente.saldo, 0, 'la cuenta puente queda en cero al facturar');
+  assert.equal(saldos.find((x) => x.cuenta === '2205').saldo, -t.total);
+});
+const r2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
+
+test('comprobante manual: cuadre, cuentas de movimiento y tercero obligatorio', () => {
+  const db = base();
+  db.planCuentas = C.planCuentasBase();
+  const ok = { fecha: '2026-03-01', descripcion: 'Reclasificación', lineas: [{ cuenta: '5315', debito: 100, credito: 0 }, { cuenta: '1455', debito: 0, credito: 100 }] };
+  assert.deepEqual(C.validarComprobanteManual(db, ok, HOY), []);
+  assert.ok(C.validarComprobanteManual(db, Object.assign({}, ok, { lineas: [{ cuenta: '5315', debito: 100 }, { cuenta: '1455', credito: 90 }] }), HOY).some((e) => e.includes('no cuadra')));
+  assert.ok(C.validarComprobanteManual(db, Object.assign({}, ok, { lineas: [{ cuenta: '14', debito: 100 }, { cuenta: '1455', credito: 100 }] }), HOY).some((e) => e.includes('agrupación')));
+  assert.ok(C.validarComprobanteManual(db, Object.assign({}, ok, { lineas: [{ cuenta: '2205', debito: 100 }, { cuenta: '1455', credito: 100 }] }), HOY).some((e) => e.includes('tercero')));
+});
+
+test('un documento anulado genera su comprobante de reversión', () => {
+  const db = base();
+  db.planCuentas = C.planCuentasBase();
+  const e1 = add(db, ent('2026-03-01', [{ productoId: 'a', lote: 'L1', vence: '2027-01-01', cantidad: 10, costoUnit: 100 }]));
+  e1.anulado = true; e1.anulacion = { fecha: '2026-03-10T10:00:00', motivo: 'Error' };
+  const cps = C.comprobantesContables(db, C.replay(db));
+  assert.equal(cps.length, 2);
+  assert.ok(cps[1].reversion);
+  assert.ok(C.saldosContables(cps).every((s) => s.saldo === 0));
+});
+
+test('mayor y balances por nivel y estado de costo', () => {
+  const db = crearDemo(HOY);
+  const st = C.replay(db);
+  const cps = C.comprobantesContables(db, st);
+  const clases = C.balanceComprobacion(db, cps, '2026-01-01', HOY, 1);
+  assert.ok(clases.every((x) => x.cuenta.length === 1));
+  const totalD = clases.reduce((s, x) => s + x.debito, 0), totalC = clases.reduce((s, x) => s + x.credito, 0);
+  assert.ok(Math.abs(totalD - totalC) < 0.01);
+  const ec = C.estadoCosto(db, '2026-01-01', HOY);
+  assert.ok(Math.abs(ec.costoConsumido - ec.consumoRegistrado) < 1, 'el juego de inventarios cuadra con las salidas registradas');
+});
+
+test('carga masiva de plan de cuentas y terceros', () => {
+  const plan = C.interpretarPlanCuentas(C.parseCSV('Código;Nombre;Naturaleza;Tercero\n14;INVENTARIOS;D;\n1455;Materiales;D;\n145505;Insumos odontológicos;D;\n2205;Proveedores;C;Sí\n'));
+  assert.deepEqual(plan.errores, []);
+  assert.equal(plan.cuentas.find((c) => c.codigo === '1455').movimiento, false);
+  assert.equal(plan.cuentas.find((c) => c.codigo === '145505').movimiento, true);
+  assert.ok(plan.cuentas.find((c) => c.codigo === '2205').terceros);
+  const db = base();
+  const ter = C.interpretarTerceros(C.parseCSV('Tipo documento;NIT;Razón social;Tipo;Ciudad\nNIT;800.197.268-4;DIAN;Proveedor;Bogotá\nCC;1020304050;Ana Pérez;Paciente;Cali\nNIT;900123456-1;Malo;Proveedor;\n'), db);
+  assert.equal(ter.terceros.length, 3);
+  assert.equal(ter.terceros[0].dv, '4');
+  assert.deepEqual(ter.terceros[1].tipos, ['paciente']);
+  assert.ok(ter.errores.some((e) => e.includes('dígito de verificación')));
+});
+
+test('archivo de interfaz contable con diseño configurable', () => {
+  const db = base();
+  db.planCuentas = C.planCuentasBase();
+  add(db, ent('2026-03-01', [{ productoId: 'a', lote: 'L1', vence: '2027-01-01', cantidad: 10, costoUnit: 100 }]));
+  const cps = C.comprobantesContables(db, C.replay(db));
+  const txt = C.archivoInterfaz(cps, { columnas: ['fecha', 'cuenta', 'debito', 'credito'], separador: ',', formatoFecha: 'dd/mm/aaaa', decimal: '.' });
+  const lineas = txt.replace('\ufeff', '').split('\r\n');
+  assert.equal(lineas[0], 'Fecha,Cuenta,Débito,Crédito');
+  assert.ok(lineas.some((l) => l === '01/03/2026,1455,1000.00,0.00'));
+});
+
+test('cuenta puente = pendiente por facturar, aun con devoluciones a proveedor', () => {
+  const db = C.dbVacia();
+  db.productos.push({ id: 'a', codigo: 'A', nombre: 'Guantes', unidad: 'caja', activo: true });
+  db.proveedores.push({ id: 'pv', nombre: 'Prov', nit: '900123456' });
+  db.movimientos.push({ id: 'e', num: 'EN-1', tipo: 'entrada', fecha: '2026-01-10', proveedorId: 'pv', docTipo: 'FE', docNum: 'F1', lineas: [{ productoId: 'a', lote: 'L1', vence: '2027-01-01', cantidad: 10, costoUnit: 1000 }] });
+  db.movimientos.push({ id: 'd', num: 'DV-1', tipo: 'devolucion', fecha: '2026-01-15', proveedorId: 'pv', causa: 'calidad', docNum: 'NC-1', lineas: [{ productoId: 'a', lote: 'L1', vence: '2027-01-01', cantidad: 2 }] });
+  const st = C.replay(db);
+  const s = C.saldosContables(C.comprobantesContables(db, st));
+  const puente = -(s.find((x) => x.cuenta === '233595') || { saldo: 0 }).saldo;
+  const pend = C.pendientesPorFacturar(db).reduce((a, p) => a + p.valor, 0);
+  assert.equal(puente, pend);
+  assert.equal((s.find((x) => x.cuenta === '2205') || {}).saldo, 2000);
 });

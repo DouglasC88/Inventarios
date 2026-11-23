@@ -18,7 +18,7 @@ export default function Inicio({ modulos }) {
     kardex: money(C.valorInventario(state)) + ' en inventario',
     productos: num(db.productos.length) + ' productos · ' + num(db.servicios.length) + ' servicios',
     terceros: num(db.proveedores.length) + ' terceros',
-    contabilidad: 'Comprobantes automáticos',
+    contabilidad: num(C.pendientesPorFacturar(db).length) + ' líneas por facturar',
     reportes: '32 reportes',
     config: num(db.config.ubicaciones.length) + ' bodegas · ' + num(db.usuarios.length) + ' usuarios',
     normatividad: 'NIIF · Estatuto Tributario · INVIMA',

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-  ArrowRightLeft, BarChart3, House, Stethoscope, Calculator, BookOpen, Landmark, LifeBuoy, Bell, Contact, PackageSearch, Boxes, CalendarClock, ClipboardCheck, ClipboardList, Compass, FileSpreadsheet, FolderTree, Hexagon, Layers, Tags, Warehouse,
+  ArrowRightLeft, BarChart3, Receipt, ListTree, Download, House, Stethoscope, Calculator, BookOpen, Landmark, LifeBuoy, Bell, Contact, PackageSearch, Boxes, CalendarClock, ClipboardCheck, ClipboardList, Compass, FileSpreadsheet, FolderTree, Hexagon, Layers, Tags, Warehouse,
   LayoutDashboard, Lock, LogOut, Menu, PackageMinus, PackagePlus, RefreshCcw, Scale, ScanSearch, ScrollText,
   Settings, ShoppingCart, SlidersHorizontal, Thermometer, Undo2, UsersRound
 } from 'lucide-react';
@@ -35,7 +35,7 @@ import Grupos from './views/Grupos.jsx';
 import LotesMaestro from './views/LotesMaestro.jsx';
 import Guia, { PrimerosPasos } from './views/Guia.jsx';
 import Inicio from './views/Inicio.jsx';
-import { Comprobantes, Auxiliar, Conciliacion, CuentasContables } from './views/Contabilidad.jsx';
+import { Facturas, Comprobantes, LibroDiario, MayorBalances, Auxiliar, EstadoCosto, Conciliacion, PlanCuentas, CuentasContables, Interfaz } from './views/Contabilidad.jsx';
 import Existencias from './views/Existencias.jsx';
 import BuscadorGeneral from './components/BuscadorGeneral.jsx';
 
@@ -79,10 +79,16 @@ const MODULOS = [
     ['terceros', 'Terceros (NIT)', Contact, Proveedores]
   ]],
   ['contabilidad', 'Contabilidad', Calculator, [
+    ['facturasp', 'Facturas de proveedor', Receipt, Facturas],
     ['comprobantes', 'Comprobantes', BookOpen, Comprobantes],
-    ['auxiliar', 'Libro auxiliar', Scale, Auxiliar],
+    ['diario', 'Libro diario', BookOpen, LibroDiario],
+    ['mayor', 'Mayor y balances', Scale, MayorBalances],
+    ['auxiliar', 'Auxiliares', ListTree, Auxiliar],
+    ['costo', 'Estado de costo', Calculator, EstadoCosto],
     ['conciliacion', 'Conciliación', Landmark, Conciliacion],
-    ['ccuentas', 'Cuentas contables', Settings, CuentasContables]
+    ['plan', 'Plan de cuentas', ListTree, PlanCuentas],
+    ['ccuentas', 'Parametrización', Settings, CuentasContables],
+    ['interfaz', 'Interfaz contable', Download, Interfaz]
   ]],
   ['reportes', 'Reportes', BarChart3, [
     ['reportes', 'Centro de reportes', BarChart3, Reportes]

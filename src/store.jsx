@@ -9,7 +9,7 @@ const Ctx = createContext(null);
 function normalizar(d) {
   const base = C.dbVacia();
   const db = Object.assign(base, d);
-  ['productos', 'proveedores', 'movimientos', 'conteos', 'cierres', 'temperaturas', 'auditoria', 'ordenes', 'requisiciones', 'kits', 'usuarios', 'bodegas', 'grupos', 'lotes', 'servicios']
+  ['productos', 'proveedores', 'movimientos', 'conteos', 'cierres', 'temperaturas', 'auditoria', 'ordenes', 'requisiciones', 'kits', 'usuarios', 'bodegas', 'grupos', 'lotes', 'servicios', 'facturasProveedor', 'comprobantesManuales']
     .forEach((k) => { if (!Array.isArray(db[k])) db[k] = []; });
   db.config = Object.assign(C.configBase(), d.config || {});
   db.config.empresa = Object.assign(C.configBase().empresa, (d.config || {}).empresa || {});
@@ -27,6 +27,10 @@ function normalizar(d) {
   // Los kits por procedimiento pasan a ser servicios con sus insumos.
   if (!Array.isArray(d.servicios) && db.kits.length) db.servicios = db.kits.map((k) => Object.assign({ categoria: '', cups: '', precio: '', ivaPct: '', duracion: '', activo: true }, k));
   db.config.contabilidad = Object.assign(C.cuentasBase(), (d.config || {}).contabilidad || {});
+  db.config.contabilidad.retenciones = Object.assign(C.cuentasBase().retenciones, ((d.config || {}).contabilidad || {}).retenciones || {});
+  if (!Array.isArray(d.planCuentas) || !d.planCuentas.length) db.planCuentas = C.planCuentasBase();
+  // Datos anteriores a la cuenta puente: las compras ya registradas se tomaban contra proveedores.
+  if (d.config && d.config.contabilidad && d.config.contabilidad.usarPuente === undefined) db.config.contabilidad.usarPuente = false;
   if (!Array.isArray(d.lotes)) C.ordenar(db.movimientos).forEach((m) => { if (!m.anulado) C.asegurarLotes(db, m); });
   return db;
 }

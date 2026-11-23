@@ -15,7 +15,7 @@ const ARTICULOS = [
     'También puede crearlo desde cualquier buscador de tercero: escriba el NIT y elija "Crear tercero".'
   ]],
   ['productos', 'Cómo crear un producto o insumo con sus lotes', ['productos', 'nuevo'], [
-    'Menú Productos y servicios › Productos › "Nuevo producto".',
+    'Menú Productos y servicios › Productos › "Nuevo": elija qué va a crear (insumo, dispositivo médico, medicamento, instrumental o equipo, o servicio).',
     'Identificación: código, nombre, clasificación (escriba la línea o grupo), tipo de material, marca, presentación y código de barras.',
     'Almacenamiento: unidad, mínimo, máximo, bodega habitual y ubicación física. Marque si maneja lote y vencimiento.',
     'Compras: unidad de compra (por ejemplo, caja x50), proveedor preferido y días de entrega.',
@@ -40,9 +40,15 @@ const ARTICULOS = [
     'Desde Lotes puede poner un lote en cuarentena o bloquearlo (alerta sanitaria, excursión de temperatura) y liberarlo después.'
   ]],
   ['productos', 'Cómo cargar productos y existencias desde Excel', ['importar', ''], [
-    'Menú Productos y servicios › Carga desde Excel › "Plantilla".',
+    'Menú Productos y servicios › Carga desde Excel › pestaña Productos › "Plantilla".',
     'Llene una fila por lote: código, nombre, clasificación, unidad, lote, vencimiento, cantidad y costo.',
     'Suba el archivo: verá la vista previa con errores por fila. Pulse "Aplicar importación".'
+  ]],
+  ['terceros', 'Cómo cargar terceros de forma masiva', ['importar', 'terceros'], [
+    'Menú Productos y servicios › Carga desde Excel › pestaña Terceros › "Plantilla".',
+    'Una fila por tercero: tipo de documento, número (sin dígito de verificación), razón social, tipo (proveedor, cliente, paciente, empleado), ciudad, correo y teléfono.',
+    'Suba el archivo: el sistema calcula el DV, marca los que ya existen (se actualizan) y los que tienen errores.',
+    'Pulse "Cargar terceros".'
   ]],
   ['compras', 'Cómo hacer una orden de compra', ['ordenes', 'nuevo'], [
     'Menú Compras y entradas › Órdenes de compra › "Nueva orden".',
@@ -88,15 +94,31 @@ const ARTICULOS = [
     'Kardex e inventario › Cierres › "Nuevo cierre". Revise el deterioro por valor neto realizable.',
     'Al cerrar, nadie puede registrar ni anular movimientos con fecha igual o anterior.'
   ]],
+  ['contabilidad', 'Cómo cargar o ajustar el plan de cuentas', ['plan', ''], [
+    'El sistema trae el PUC (Dec. 2650/1993) con las cuentas que usa el inventario.',
+    'Para usar el plan de su empresa: Contabilidad › Plan de cuentas › "Cargar desde Excel" (o Carga desde Excel › Plan de cuentas). Columnas: código, nombre, naturaleza (D o C) y si exige tercero.',
+    'Elija "Combinar" (agrega y actualiza) o "Reemplazar" (no deja borrar cuentas que ya tienen movimiento).',
+    'Solo las cuentas sin subcuentas reciben movimiento. Si crea subcuentas (por ejemplo 145505), actualice la parametrización.'
+  ]],
   ['contabilidad', 'Cómo configurar las cuentas contables', ['ccuentas', ''], [
-    'Menú Contabilidad › Cuentas: revise la cuenta de cada concepto (inventario 1455, proveedores 2205, costo 6155…).',
+    'Menú Contabilidad › Parametrización: revise la cuenta de cada concepto (inventario 1455, puente 233595, proveedores 2205, IVA 2408, retenciones 236540, 2367 y 2368, costo 6155…).',
     'Opcional: asigne cuentas propias a una línea o grupo de la clasificación; los niveles inferiores las heredan.',
+    'Defina si usa cuenta puente (mercancía recibida por facturar), centro de costo por bodega y los porcentajes de retención.',
     'Valide la parametrización con su contador.'
   ]],
+  ['contabilidad', 'Cómo registrar la factura del proveedor', ['facturasp', 'nuevo'], [
+    'Primero se registra la entrada (lo que llegó). Contablemente queda en la cuenta puente "mercancía recibida por facturar".',
+    'Cuando llegue la factura: Contabilidad › Facturas de proveedor › "Registrar factura". Elija el proveedor y marque las líneas recibidas que cubre.',
+    'Escriba el valor facturado por línea: si difiere de lo recibido, la diferencia de precio se contabiliza aparte.',
+    'El sistema calcula IVA descontable, retención en la fuente, reteIVA y reteICA, y el total a pagar.',
+    'La puente queda en cero cuando todo lo recibido está facturado (Contabilidad › Conciliación).'
+  ]],
   ['contabilidad', 'Cómo pasar el inventario a la contabilidad', ['comprobantes', ''], [
-    'Menú Contabilidad › Comprobantes: cada movimiento genera su comprobante automáticamente.',
-    'Filtre por fechas y pulse "Exportar al software contable": obtiene un archivo con fecha, cuenta, NIT, centro de costo, débito y crédito.',
-    'Contabilidad › Conciliación compara el saldo contable del inventario con el valor del kardex.'
+    'Menú Contabilidad › Comprobantes: cada movimiento, factura y cierre genera su comprobante automáticamente; los anulados generan su reversión.',
+    'Para reclasificaciones o ajustes use "Comprobante manual" (debe cuadrar y usar cuentas de movimiento).',
+    'Consulte Libro diario, Mayor y balances, Auxiliares (por cuenta y tercero) y Estado de costo.',
+    'Contabilidad › Interfaz contable: diseñe el archivo (columnas, separador, formato de fecha) para su software contable y descárguelo.',
+    'Contabilidad › Conciliación compara el saldo contable del inventario con el kardex y la cuenta puente con lo pendiente por facturar.'
   ]],
   ['reportes', 'Cómo sacar un reporte', ['reportes', ''], [
     'Menú Reportes: elija uno de los 32 reportes.',

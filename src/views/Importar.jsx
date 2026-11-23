@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
-import { Download, FileSpreadsheet, Upload } from 'lucide-react';
+import { Contact, Download, FileSpreadsheet, ListTree, Upload } from 'lucide-react';
 import { useStore, C } from '../store.jsx';
-import { Btn, Chip, Empty, Errores, Field, Nota, Panel } from '../components/ui.jsx';
+import { Btn, Chip, Empty, Errores, Field, Nota, Panel, Tabs } from '../components/ui.jsx';
 import { descargar, fecha, money, num } from '../format.js';
 
 const PLANTILLA = [
@@ -19,7 +19,7 @@ async function leerArchivo(file) {
   return C.parseCSV(await file.text());
 }
 
-export default function Importar() {
+function ImportarProductos() {
   const { db, hoy, commit, toast, nombreUsuario, go } = useStore();
   const archivo = useRef(null);
   const [nombre, setNombre] = useState('');
@@ -151,6 +151,126 @@ export default function Importar() {
           </div>
         </Panel>
       ) : <Panel><Empty icon={FileSpreadsheet} title="Ningún archivo cargado" text="Descargue la plantilla, llénela y súbala aquí." /></Panel>}
+    </div>
+  );
+}
+
+const PLANTILLA_TERCEROS = [
+  ['Tipo documento', 'NIT', 'DV', 'Razón social', 'Tipo', 'Dirección', 'Ciudad', 'Teléfono', 'Correo', 'Contacto'],
+  ['NIT', '900123456', '8', 'Proveedor de ejemplo S.A.S.', 'Proveedor', 'Cra. 1 # 2-3', 'Bogotá D.C.', '6015550000', 'facturas@ejemplo.co', 'Ana Gómez'],
+  ['CC', '1020304050', '', 'Paciente de ejemplo', 'Paciente', '', 'Medellín', '3000000000', '', '']
+];
+const PLANTILLA_PLAN = [
+  ['Código', 'Nombre', 'Naturaleza', 'Tercero'],
+  ['14', 'INVENTARIOS', 'D', ''], ['1455', 'Materiales, repuestos y accesorios', 'D', ''], ['145505', 'Insumos odontológicos', 'D', ''],
+  ['22', 'PROVEEDORES', 'C', ''], ['2205', 'Nacionales', 'C', 'Sí']
+];
+
+function CargaArchivo({ onFilas, plantilla, nombrePlantilla, titulo, texto }) {
+  const ref = useRef(null);
+  const { toast } = useStore();
+  const leer = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    try { onFilas(await leerArchivo(file), file.name); } catch { toast('No se pudo leer el archivo. Use Excel (.xlsx) o CSV.', 'error'); }
+  };
+  return (
+    <Panel title={titulo} icon={FileSpreadsheet} sub={texto}
+      actions={<><Btn icon={Download} onClick={() => descargar(nombrePlantilla, C.csv(plantilla))}>Plantilla</Btn><Btn variant="primary" icon={Upload} onClick={() => ref.current && ref.current.click()}>Subir archivo</Btn></>}>
+      <input ref={ref} type="file" accept=".xlsx,.csv,.txt" hidden onChange={leer} />
+    </Panel>
+  );
+}
+
+function CargaTerceros() {
+  const { db, commit, toast } = useStore();
+  const [res, setRes] = useState(null);
+  const [nombre, setNombre] = useState('');
+  const aplicar = () => {
+    const ok = res.terceros;
+    commit((d) => {
+      ok.forEach((t) => {
+        const x = Object.assign({}, t); delete x.fila; delete x.existente;
+        if (t.existente) { const i = d.proveedores.findIndex((p) => p.id === t.id); d.proveedores[i] = Object.assign({}, d.proveedores[i], Object.fromEntries(Object.entries(x).filter(([, v]) => v !== '' && v !== null))); }
+        else d.proveedores.push(Object.assign(x, { id: C.nuevoId() + Math.random().toString(36).slice(2, 5) }));
+      });
+    }, 'Carga masiva de terceros', nombre + ' · ' + ok.length + ' terceros');
+    toast(ok.length + ' terceros cargados');
+    setRes(null);
+  };
+  const nuevos = res ? res.terceros.filter((t) => !t.existente).length : 0;
+  return (
+    <div className="stack">
+      <CargaArchivo titulo="Terceros desde Excel" nombrePlantilla="plantilla-terceros.csv" plantilla={PLANTILLA_TERCEROS}
+        texto="Proveedores, clientes, pacientes y empleados: tipo de documento, NIT o cédula, razón social, tipo, dirección, ciudad, teléfono y correo. El dígito de verificación se calcula y se valida."
+        onFilas={(f, n) => { setNombre(n); setRes(C.interpretarTerceros(f, db)); }} />
+      {res && (
+        <Panel title={'Vista previa: ' + nombre} icon={Contact}>
+          <Errores lista={res.errores} />
+          <div className="kv"><div><span>Nuevos</span><b>{nuevos}</b></div><div><span>Se actualizan</span><b>{res.terceros.length - nuevos}</b></div></div>
+          <div className="tbl-wrap" style={{ maxHeight: 380 }}><table className="tbl">
+            <thead><tr><th>Fila</th><th>Documento</th><th>Nombre</th><th>Tipo</th><th>Ciudad</th><th>Estado</th></tr></thead>
+            <tbody>{res.terceros.map((t) => <tr key={t.fila}><td>{t.fila}</td><td className="mono">{C.documentoTercero(t)}</td><td>{t.nombre}</td><td>{t.tipos.map((x) => C.TIPOS_TERCERO[x]).join(', ')}</td><td>{t.ciudad}</td><td>{t.existente ? <Chip tone="amber">Actualiza</Chip> : <Chip tone="green">Nuevo</Chip>}</td></tr>)}</tbody>
+          </table></div>
+          <div className="toolbar" style={{ marginTop: 12, justifyContent: 'flex-end' }}><Btn onClick={() => setRes(null)}>Descartar</Btn><Btn variant="primary" icon={Upload} onClick={aplicar} disabled={!res.terceros.length}>Cargar {res.terceros.length} terceros</Btn></div>
+        </Panel>
+      )}
+    </div>
+  );
+}
+
+function CargaPlan() {
+  const { db, state, commit, toast } = useStore();
+  const [res, setRes] = useState(null);
+  const [nombre, setNombre] = useState('');
+  const [modo, setModo] = useState('combinar');
+  const aplicar = () => {
+    if (modo === 'reemplazar') {
+      const usadas = new Set(C.comprobantesContables(db, state).flatMap((cp) => cp.lineas.map((l) => l.cuenta)));
+      const faltan = [...usadas].filter((c) => !res.cuentas.some((x) => x.codigo === c));
+      if (faltan.length) return toast('No se puede reemplazar: el archivo no trae cuentas ya usadas (' + faltan.slice(0, 5).join(', ') + '). Use "Combinar".', 'error');
+    }
+    commit((d) => {
+      if (modo === 'reemplazar') d.planCuentas = res.cuentas;
+      else res.cuentas.forEach((c) => { const i = d.planCuentas.findIndex((x) => x.codigo === c.codigo); if (i >= 0) d.planCuentas[i] = Object.assign({}, d.planCuentas[i], c); else d.planCuentas.push(c); });
+    }, 'Carga del plan de cuentas', nombre + ' · ' + res.cuentas.length + ' cuentas · ' + modo);
+    toast(res.cuentas.length + ' cuentas cargadas. Revise la parametrización contable.');
+    setRes(null);
+  };
+  return (
+    <div className="stack">
+      <CargaArchivo titulo="Plan de cuentas desde Excel" nombrePlantilla="plantilla-plan-de-cuentas.csv" plantilla={PLANTILLA_PLAN}
+        texto="Cargue el plan de cuentas de su empresa (PUC o catálogo propio bajo NIIF): código, nombre, naturaleza (D o C) y si exige tercero. Las cuentas que no tienen subcuentas quedan como cuentas de movimiento."
+        onFilas={(f, n) => { setNombre(n); setRes(C.interpretarPlanCuentas(f)); }} />
+      {res && (
+        <Panel title={'Vista previa: ' + nombre} icon={ListTree}>
+          <Errores lista={res.errores} />
+          <div className="form-grid" style={{ marginBottom: 12 }}>
+            <Field label="Cómo cargar"><select className="select input" value={modo} onChange={(e) => setModo(e.target.value)}><option value="combinar">Combinar: agrega las nuevas y actualiza las existentes</option><option value="reemplazar">Reemplazar todo el plan por el del archivo</option></select></Field>
+          </div>
+          <div className="tbl-wrap" style={{ maxHeight: 380 }}><table className="tbl">
+            <thead><tr><th>Código</th><th>Nombre</th><th>Nivel</th><th>Naturaleza</th><th>Tercero</th><th>Tipo</th></tr></thead>
+            <tbody>{res.cuentas.map((c) => <tr key={c.codigo}><td className="mono" style={{ paddingLeft: 12 + (C.nivelCuenta(c.codigo) - 1) * 12 }}>{c.codigo}</td><td>{c.nombre}</td><td>{C.NIVELES_CUENTA[C.nivelCuenta(c.codigo)]}</td><td>{c.naturaleza === 'C' ? 'Crédito' : 'Débito'}</td><td>{c.terceros ? 'Sí' : ''}</td><td>{c.movimiento ? <Chip tone="green">Movimiento</Chip> : <Chip tone="muted">Agrupa</Chip>}</td></tr>)}</tbody>
+          </table></div>
+          <div className="toolbar" style={{ marginTop: 12, justifyContent: 'flex-end' }}><Btn onClick={() => setRes(null)}>Descartar</Btn><Btn variant="primary" icon={Upload} onClick={aplicar} disabled={!res.cuentas.length || res.errores.length > 0}>Cargar {res.cuentas.length} cuentas</Btn></div>
+        </Panel>
+      )}
+    </div>
+  );
+}
+
+export default function Importar({ arg }) {
+  const { go } = useStore();
+  const [tipo, setTipo] = useState(['plan', 'terceros'].includes(arg) ? arg : 'productos');
+  return (
+    <div className="stack">
+      <Panel title="Carga masiva desde Excel" icon={FileSpreadsheet} sub="Migre sus datos desde otro sistema o desde Excel. Cada carga muestra una vista previa con los errores por fila antes de aplicar.">
+        <Tabs value={tipo} onChange={(v) => (v === 'fisico' ? go('conteos', 'excel') : setTipo(v))} options={[['productos', 'Productos, insumos y existencias'], ['terceros', 'Terceros'], ['plan', 'Plan de cuentas'], ['fisico', 'Inventario físico (conteo)']]} />
+      </Panel>
+      {tipo === 'productos' && <ImportarProductos />}
+      {tipo === 'terceros' && <CargaTerceros />}
+      {tipo === 'plan' && <CargaPlan />}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Boxes, Download, Pencil, Plus, ScrollText, Snowflake, Trash2 } from 'lucide-react';
+import { Boxes, Download, Pencil, Pill, Plus, ScrollText, Snowflake, Stethoscope, Syringe, Trash2, Wrench, Package } from 'lucide-react';
 import { useStore, C } from '../store.jsx';
 import { SelectBodega, SelectGrupo, SelectTercero } from '../components/Movimientos.jsx';
 import { Btn, Chip, Empty, Errores, Field, Modal, Nota, Panel, SearchBox, Tabs } from '../components/ui.jsx';
@@ -11,6 +11,13 @@ const VACIO = {
   requiereInvima: true, invima: '', invimaVence: '', riesgo: 'I', cadenaFrio: false, controlaLote: true, controlaVence: true,
   vnrUnit: '', ivaPct: '', precioVenta: '', activo: true, unidadCompra: '', factorCompra: 1, leadTime: 7, proveedorId: ''
 };
+const TIPOS_CREAR = [
+  ['insumo', 'Insumo', 'Material de consumo (gasas, guantes, cepillos…)', Package, '#22d3ee', '#0ea5e9', { categoria: 'insumo', tipoMaterial: 'consumible', requiereInvima: false, riesgo: 'N/A' }],
+  ['dispositivo', 'Dispositivo médico', 'Con registro INVIMA y clase de riesgo', Syringe, '#a78bfa', '#7c3aed', { categoria: 'dispositivo', tipoMaterial: 'dispositivo', requiereInvima: true, riesgo: 'I' }],
+  ['medicamento', 'Medicamento', 'Con registro INVIMA y código CUM', Pill, '#34d399', '#059669', { categoria: 'medicamento', tipoMaterial: 'medicamento', requiereInvima: true, riesgo: 'N/A' }],
+  ['instrumental', 'Instrumental o equipo', 'Reutilizable, sin vencimiento', Wrench, '#fbbf24', '#f97316', { categoria: 'dispositivo', tipoMaterial: 'instrumental', requiereInvima: true, controlaVence: false }],
+  ['servicio', 'Servicio', 'Procedimiento con precio, CUPS e insumos que consume', Stethoscope, '#f472b6', '#db2777', null]
+];
 const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
 export function FormProducto({ inicial, onClose }) {
@@ -88,7 +95,7 @@ export function FormProducto({ inicial, onClose }) {
   };
 
   return (
-    <Modal open title={f.id ? 'Ficha del producto ' + f.codigo : 'Nuevo producto'} icon={Boxes} onClose={onClose} wide
+    <Modal open title={f.id ? 'Ficha del producto ' + f.codigo : 'Nuevo ' + ({ consumible: 'insumo', dispositivo: 'dispositivo médico', medicamento: 'medicamento', instrumental: 'instrumental o equipo' }[f.tipoMaterial] || 'producto')} icon={Boxes} onClose={onClose} wide
       footer={<><Btn onClick={onClose}>Cancelar</Btn><Btn variant="primary" onClick={guardar}>Guardar</Btn></>}>
       <Errores lista={err} />
       <div className="section-title" style={{ marginTop: 0 }}>Identificación</div>
@@ -205,7 +212,8 @@ export default function Productos({ arg }) {
   const [tipo, setTipo] = useState('todos');
   const [grupo, setGrupo] = useState(arg && arg.startsWith('grupo:') ? arg.slice(6) : 'todos');
   const [estado, setEstado] = useState('activos');
-  const [editar, setEditar] = useState(arg === 'nuevo' ? {} : null);
+  const [editar, setEditar] = useState(null);
+  const [elegir, setElegir] = useState(arg === 'nuevo');
   const enGrupo = grupo !== 'todos' && grupo !== 'sin' ? C.gruposDescendientes(db, grupo) : null;
   const lista = db.productos.filter((p) =>
     (estado === 'todos' || (estado === 'activos' ? p.activo !== false : p.activo === false)) &&
@@ -225,7 +233,7 @@ export default function Productos({ arg }) {
 
   return (
     <Panel title="Maestro de productos" icon={Boxes} sub={num(lista.length) + ' productos'}
-      actions={<><Btn icon={Download} onClick={exportar}>Exportar</Btn>{puede('maestros') && <Btn variant="primary" icon={Plus} onClick={() => setEditar({})}>Nuevo producto</Btn>}</>}>
+      actions={<><Btn icon={Download} onClick={exportar}>Exportar</Btn>{puede('maestros') && <Btn variant="primary" icon={Plus} onClick={() => setElegir(true)}>Nuevo</Btn>}</>}>
       <div className="toolbar">
         <SearchBox value={q} onChange={setQ} placeholder="Nombre, código, marca, referencia, código de barras, INVIMA" />
         <div style={{ width: 300, maxWidth: '100%' }}><SelectGrupo value={grupo} onChange={setGrupo} incluirTodos incluirSin /></div>
@@ -272,6 +280,21 @@ export default function Productos({ arg }) {
         </div>
       ) : <Empty icon={Boxes} title="Sin productos" text="Cree el primer producto o cambie el filtro." />}
       {editar && <FormProducto inicial={editar} onClose={() => setEditar(null)} />}
+      {elegir && (
+        <Modal open title="¿Qué desea crear?" icon={Plus} onClose={() => setElegir(false)}>
+          <div className="choose">
+            {TIPOS_CREAR.map(([k, t, s, Icon, c1, c2, datos]) => (
+              <button key={k} type="button" className="tile" style={{ '--c1': c1, '--c2': c2 }}
+                onClick={() => { setElegir(false); if (k === 'servicio') go('kits', 'nuevo'); else setEditar(datos); }}>
+                <span className="orb"><Icon size={34} strokeWidth={1.7} /></span>
+                <span className="tile-t">{t}</span>
+                <span className="tile-s">{s}</span>
+              </button>
+            ))}
+          </div>
+          <div style={{ marginTop: 16 }}><Nota>Los insumos, dispositivos, medicamentos e instrumental tienen existencias, lotes y kardex. Los servicios no tienen existencia: tienen precio, código CUPS y los insumos que consumen.</Nota></div>
+        </Modal>
+      )}
     </Panel>
   );
 }

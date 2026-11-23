@@ -9,7 +9,8 @@ const PERM_TEXTO = {
   supervisor: 'Operación completa, ajustes, bajas, conteos, cierres y anulaciones.',
   almacenista: 'Entradas, salidas, traslados, devoluciones, órdenes, requisiciones y maestros. No ajusta ni cierra.',
   consultorio: 'Salidas desde su bodega, requisiciones y cadena de frío.',
-  consulta: 'Solo lectura y reportes (contador, revisor fiscal o auditor).'
+  contador: 'Contabilidad: facturas de proveedor, comprobantes manuales, plan de cuentas, interfaz; consulta del resto.',
+  consulta: 'Solo lectura y reportes (revisor fiscal o auditor).'
 };
 
 function FormUsuario({ inicial, onClose }) {
