@@ -601,3 +601,47 @@ test('código DANE del municipio por nombre, abreviatura o código', () => {
   assert.equal(r.terceros[3].paisCodigo, 'VE');
   assert.equal(r.avisos.length, 1);
 });
+
+test('grupos como en Dentos: clasificación, herencia, IVA no descontable y retención por concepto', () => {
+  const db = C.dbVacia();
+  db.grupos.push({ id: 'l', codigo: '01', nombre: 'Endodoncia', clasificacion: 'insumo', conceptoRetencion: 'compras', tarifaIvaCompra: '19nd', cuentas: { proveedores: '2335' } });
+  db.grupos.push({ id: 'g', codigo: '0101', nombre: 'Limas', parentId: 'l' });
+  db.grupos.push({ id: 'sv', codigo: 'P1', nombre: 'Endodoncia', clasificacion: 'procedimiento' });
+  assert.deepEqual(C.validarGrupo(db, { id: 'x', codigo: '02', nombre: 'Endodoncia', clasificacion: 'insumo' }).length, 1);
+  assert.deepEqual(C.validarGrupo(db, { codigo: '03', nombre: 'Ortodoncia' }).length, 1);
+  assert.equal(C.clasificacionGrupo(db, 'g'), 'insumo');
+  assert.equal(C.datoGrupo(db, 'g', 'conceptoRetencion'), 'compras');
+  const p = { id: 'a', codigo: 'LIM', nombre: 'Limas', unidad: 'caja', grupoId: 'g', clasificacion: 'insumo', controlaLote: true };
+  db.productos.push(p);
+  assert.equal(C.tarifaCompra(db, p), '19nd');
+  assert.ok(C.validarProducto(db, Object.assign({}, p, { clasificacion: 'medicamento' })).some((x) => /clasificación/.test(x)));
+  assert.ok(C.validarServicio(db, { codigo: 'S', nombre: 'Conducto', grupoId: 'g' }).some((x) => /procedimientos/.test(x)));
+  assert.deepEqual(C.validarServicio(db, { codigo: 'S', nombre: 'Conducto', grupoId: 'sv' }), []);
+  assert.equal(C.conceptoRetencionLineas(db, ['a']), 'compras');
+  db.proveedores.push({ id: 'pv', nit: '900123456', nombre: 'Prov' });
+  assert.equal(C.impuestosSugeridos(db, db.proveedores[0], 'servicios').retefuentePct, 4);
+  db.movimientos.push({ id: 'e', num: 'EN-1', tipo: 'entrada', fecha: '2026-01-10', proveedorId: 'pv', docTipo: 'FE', docNum: 'F1', lineas: [{ productoId: 'a', lote: 'L1', vence: '2027-01-01', cantidad: 10, costoUnit: 1000 }] });
+  db.facturasProveedor.push({ id: 'f', num: 'FP-1', fecha: '2026-01-12', proveedorId: 'pv', docTipo: 'FE', docNum: 'F1', conceptoRetencion: 'compras', retefuentePct: 2.5, reteivaPct: 0, reteicaPct: 0,
+    lineas: [{ movId: 'e', idx: 0, productoId: 'a', valorRecibido: 10000, valorFacturado: 10000, ivaPct: 19, ivaNoDescontable: true }] });
+  const t = C.calcularFactura(db.facturasProveedor[0]);
+  assert.equal(t.ivaNoDescontable, 1900);
+  const cp = C.comprobantesContables(db, C.replay(db)).find((x) => x.id === 'f');
+  assert.ok(cp.cuadra);
+  assert.ok(!cp.lineas.some((l) => l.cuenta === '2408'));
+  assert.ok(cp.lineas.some((l) => l.cuenta === '6155' && l.debito === 1900));
+  assert.ok(cp.lineas.some((l) => l.cuenta === '236540' && l.credito === 250));
+  assert.ok(cp.lineas.some((l) => l.cuenta === '2335' && l.credito === t.total));
+});
+
+test('migración: clasificación de líneas antiguas y categorías de servicios a grupos', () => {
+  const db = C.dbVacia();
+  db.grupos.push({ id: 'l', codigo: '01', nombre: 'Anestesia' });
+  db.productos.push({ id: 'a', codigo: 'LID', nombre: 'Lidocaína', unidad: 'u', categoria: 'medicamento', grupoId: 'l' });
+  db.servicios.push({ id: 's', codigo: 'S1', nombre: 'Resina', categoria: 'Operatoria', lineas: [] }, { id: 's2', codigo: 'S2', nombre: 'Sellante', categoria: 'operatoria', lineas: [] });
+  C.migrarClasificacion(db);
+  assert.equal(db.grupos.find((g) => g.id === 'l').clasificacion, 'medicamento');
+  const g = db.grupos.find((x) => x.nombre === 'Operatoria');
+  assert.equal(g.clasificacion, 'procedimiento');
+  assert.equal(db.servicios[0].grupoId, g.id);
+  assert.equal(db.servicios[1].grupoId, g.id);
+});

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Ban, BookOpen, Calculator, ChevronDown, ChevronRight, Download, FileText, Landmark, ListTree, Plus, Printer, Receipt,
   RotateCcw, Save, Scale, Trash2, Upload
@@ -52,18 +52,28 @@ function NuevaFactura({ onClose }) {
   const key = (p) => p.movId + '#' + p.idx;
   const provSel = db.proveedores.find((x) => x.id === h.proveedorId);
   // IVA de cada línea: la tarifa del producto (excluido, exento, 5 % o 19 %) o, si no la tiene, el IVA general de la factura.
+  // La tarifa viene de la ficha del producto o de su grupo (IVA compra); "mayor valor del gasto" no se descuenta.
+  const tarifaLinea = (productoId) => C.tarifaCompra(db, db.productos.find((x) => x.id === productoId));
   const ivaLinea = (productoId) => {
     if (provSel && C.normalizarTercero(provSel).responsableIva === false) return 0;
-    const t = C.pctIva((db.productos.find((x) => x.id === productoId) || {}).tarifaIva);
+    const t = C.pctIva(tarifaLinea(productoId));
     return t === null ? Number(h.ivaPct) || 0 : t;
   };
-  const lineas = pend.filter((p) => sel[key(p)]).map((p) => ({ movId: p.movId, idx: p.idx, num: p.num, productoId: p.productoId, valorRecibido: p.valor, valorFacturado: Number(sel[key(p)].valor), ivaPct: ivaLinea(p.productoId) }));
+  const lineas = pend.filter((p) => sel[key(p)]).map((p) => ({ movId: p.movId, idx: p.idx, num: p.num, productoId: p.productoId, valorRecibido: p.valor, valorFacturado: Number(sel[key(p)].valor), ivaPct: ivaLinea(p.productoId), ivaNoDescontable: tarifaLinea(p.productoId) === '19nd' && ivaLinea(p.productoId) > 0 }));
+  // Tipo de concepto: el común a los grupos de las líneas marcadas; define el % y la cuenta de retención.
+  const conceptoAuto = C.conceptoRetencionLineas(db, lineas.map((l) => l.productoId));
+  const [retManual, setRetManual] = useState(false);
+  useEffect(() => {
+    if (retManual || !h.proveedorId) return;
+    const sug = C.impuestosSugeridos(db, provSel, conceptoAuto);
+    setH((x) => (x.conceptoRetencion === conceptoAuto && x.retefuentePct === sug.retefuentePct ? x : Object.assign({}, x, { conceptoRetencion: conceptoAuto, retefuentePct: sug.retefuentePct })));
+  }, [conceptoAuto, h.proveedorId, retManual]);
   const fac = Object.assign({}, h, { lineas });
   const t = C.calcularFactura(fac);
   const prov = db.proveedores.find((x) => x.id === h.proveedorId);
   const marcarTodo = () => setSel(Object.fromEntries(pend.map((p) => [key(p), { valor: p.valor }])));
   // Al elegir el proveedor se traen de su ficha el tipo de soporte, el IVA, las retenciones y el plazo de pago.
-  const elegirProveedor = (v) => { const pv = db.proveedores.find((x) => x.id === v); setH((x) => Object.assign({}, x, { proveedorId: v, docTipo: pv && pv.obligadoFacturar === false ? 'DS' : 'FE' }, C.impuestosSugeridos(db, pv))); setSel({}); };
+  const elegirProveedor = (v) => { const pv = db.proveedores.find((x) => x.id === v); setH((x) => Object.assign({}, x, { proveedorId: v, docTipo: pv && pv.obligadoFacturar === false ? 'DS' : 'FE' }, C.impuestosSugeridos(db, pv))); setSel({}); setRetManual(false); };
   const plazo = prov ? Number(C.normalizarTercero(prov).plazoPago) || 0 : 0;
   const preview = lineas.length ? C.comprobantesContables(Object.assign({}, db, { movimientos: [], cierres: [], comprobantesManuales: [], facturasProveedor: [Object.assign({ id: 'prev', num: 'FP-?' }, fac)] }), state)[0] : null;
   const guardar = () => {
@@ -105,7 +115,7 @@ function NuevaFactura({ onClose }) {
                       <td>{nombreProducto(db, p.productoId)}<div className="small muted">Lote {p.lote}</div></td><td className="num">{num(p.cantidad)}</td><td className="num">{money(p.valor)}</td>
                       <td>{s ? <input className="input num" type="number" min="0" value={s.valor} onChange={(e) => setSel((x) => Object.assign({}, x, { [k]: { valor: e.target.value } }))} style={{ width: 130 }} /> : ''}</td>
                       <td className={'num ' + (dif > 0 ? 'red-t' : dif < 0 ? 'green-t' : '')}>{s ? money(dif) : ''}</td>
-                      <td className="num small">{s ? (() => { const t = (db.productos.find((x) => x.id === p.productoId) || {}).tarifaIva; return t === 'excluido' ? 'Excluido' : ivaLinea(p.productoId) + ' %'; })() : ''}</td>
+                      <td className="num small">{s ? (() => { const t = tarifaLinea(p.productoId); return t === 'excluido' ? 'Excluido' : ivaLinea(p.productoId) + ' %' + (t === '19nd' ? ' no desc.' : ''); })() : ''}</td>
                     </tr>
                   );
                 })}
@@ -117,7 +127,12 @@ function NuevaFactura({ onClose }) {
       <div className="section-title">3 · Impuestos y retenciones</div>
       <div className="form-grid">
         <Field label="IVA general (%)" hint="Para productos sin tarifa en su ficha"><input className="input" type="number" min="0" max="100" value={h.ivaPct} onChange={(e) => setHk('ivaPct', e.target.value)} /></Field>
-        <Field label="Retención en la fuente (%)"><input className="input" type="number" min="0" max="100" step="0.01" value={h.retefuentePct} onChange={(e) => setHk('retefuentePct', e.target.value)} /></Field>
+        <Field label="Tipo de concepto" hint={conceptoAuto ? 'Tomado del grupo de los productos' : 'Los productos no tienen un concepto común'}>
+          <select className="select input" value={h.conceptoRetencion || ''} onChange={(e) => { setRetManual(true); const c = e.target.value; setH((x) => Object.assign({}, x, { conceptoRetencion: c, retefuentePct: C.impuestosSugeridos(db, provSel, c).retefuentePct })); }}>
+            <option value="">General</option>{Object.entries(C.CONCEPTOS_RETENCION).filter(([k]) => k !== 'general').map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+        </Field>
+        <Field label="Retención en la fuente (%)"><input className="input" type="number" min="0" max="100" step="0.01" value={h.retefuentePct} onChange={(e) => { setRetManual(true); setHk('retefuentePct', e.target.value); }} /></Field>
         <Field label="ReteIVA (% del IVA)"><input className="input" type="number" min="0" max="100" value={h.reteivaPct} onChange={(e) => setHk('reteivaPct', e.target.value)} /></Field>
         <Field label="ReteICA (%)"><input className="input" type="number" min="0" max="100" step="0.001" value={h.reteicaPct} onChange={(e) => setHk('reteicaPct', e.target.value)} /></Field>
       </div>
@@ -501,7 +516,6 @@ export function PlanCuentas() {
 export function CuentasContables() {
   const { db, commit, toast, puede } = useStore();
   const [c, setC] = useState(() => Object.assign(C.cuentasBase(), db.config.contabilidad || {}));
-  const [porGrupo, setPorGrupo] = useState(() => Object.fromEntries(db.grupos.map((g) => [g.id, Object.assign({ inventario: '', costoConsumo: '' }, g.cuentas || {})])));
   const [err, setErr] = useState([]);
   const editar = puede('contabilidad');
   const setCta = (k, v) => setC((x) => Object.assign({}, x, { [k]: Object.assign({}, x[k], { cuenta: v, nombre: (C.cuentaPlan(db, v) || {}).nombre || '' }) }));
@@ -509,11 +523,13 @@ export function CuentasContables() {
   const guardar = () => {
     const e = [];
     Object.keys(C.CONCEPTOS_CONTABLES).forEach((k) => { if (!C.esDeMovimiento(db, c[k].cuenta)) e.push(C.CONCEPTOS_CONTABLES[k] + ': elija una cuenta de movimiento del plan (' + (c[k].cuenta || 'vacía') + ').'); });
-    Object.entries(porGrupo).forEach(([id, v]) => Object.values(v).forEach((cta) => { if (cta && !C.esDeMovimiento(db, cta)) e.push(C.rutaGrupo(db, id) + ': la cuenta ' + cta + ' no es de movimiento.'); }));
+    Object.entries(c.retenciones.porConcepto || {}).forEach(([k, v]) => {
+      if (v.cuenta && !C.esDeMovimiento(db, v.cuenta)) e.push('Retención ' + C.CONCEPTOS_RETENCION[k] + ': la cuenta ' + v.cuenta + ' no es de movimiento.');
+      if (v.pct !== '' && v.pct !== undefined && !(Number(v.pct) >= 0 && Number(v.pct) <= 100)) e.push('Retención ' + C.CONCEPTOS_RETENCION[k] + ': el porcentaje no es válido.');
+    });
     if (e.length) return setErr(e);
     commit((d) => {
       d.config.contabilidad = c;
-      d.grupos.forEach((g) => { const v = porGrupo[g.id]; if (v) { const limpio = Object.fromEntries(Object.entries(v).filter(([, x]) => x)); if (Object.keys(limpio).length) g.cuentas = limpio; else delete g.cuentas; } });
     }, 'Parametrización contable', '');
     setErr([]); toast('Parametrización guardada');
   };
@@ -540,16 +556,21 @@ export function CuentasContables() {
           <Field label="ReteICA sugerida (%)"><input className="input" type="number" step="0.001" value={c.retenciones.reteicaPct} disabled={!editar} onChange={(e) => setRet('reteicaPct', e.target.value)} /></Field>
         </div>
       </Panel>
-      <Panel title="Cuentas por clasificación (opcional)" icon={Landmark} sub="Como la clase de valoración de SAP: una línea o grupo puede tener su propia cuenta de inventario y de costo. Los niveles inferiores la heredan.">
+      <Panel title="Retención en la fuente por tipo de concepto" icon={Landmark} sub="Cada grupo de Clasificación tiene un tipo de concepto. Al registrar la factura del proveedor se sugieren este porcentaje y esta cuenta. Vacío = la retención general.">
         <div className="tbl-wrap"><table className="tbl lines">
-          <thead><tr><th>Clasificación</th><th style={{ minWidth: 300 }}>Cuenta de inventario</th><th style={{ minWidth: 300 }}>Cuenta de costo por consumo</th></tr></thead>
-          <tbody>{C.arbolGrupos(db).map((g) => (
-            <tr key={g.id}><td style={{ paddingLeft: 12 + (g.nivel - 1) * 22 }}>{g.codigo} · {g.nombre}</td>
-              {['inventario', 'costoConsumo'].map((k) => (
-                <td key={k}>{editar ? <div className="with-clear"><SelectCuenta value={(porGrupo[g.id] || {})[k] || ''} placeholder="Hereda la cuenta general" onChange={(v) => setPorGrupo((x) => Object.assign({}, x, { [g.id]: Object.assign({}, x[g.id], { [k]: v }) }))} />{(porGrupo[g.id] || {})[k] && <button type="button" onClick={() => setPorGrupo((x) => Object.assign({}, x, { [g.id]: Object.assign({}, x[g.id], { [k]: '' }) }))}>×</button>}</div> : <span className="mono">{(porGrupo[g.id] || {})[k] || 'Hereda'}</span>}</td>
-              ))}</tr>
-          ))}</tbody>
+          <thead><tr><th>Tipo de concepto</th><th className="num">Retención (%)</th><th style={{ minWidth: 320 }}>Cuenta de retención</th></tr></thead>
+          <tbody>{Object.entries(C.CONCEPTOS_RETENCION).map(([k, nombre]) => {
+            const v = (c.retenciones.porConcepto || {})[k] || { pct: '', cuenta: '' };
+            const setV = (campo, x) => setC((y) => Object.assign({}, y, { retenciones: Object.assign({}, y.retenciones, { porConcepto: Object.assign({}, y.retenciones.porConcepto, { [k]: Object.assign({}, v, { [campo]: x }) }) }) }));
+            return (
+              <tr key={k}><td className="strong">{nombre}</td>
+                <td><input className="input num" type="number" min="0" max="100" step="0.01" value={v.pct ?? ''} disabled={!editar} placeholder={String(c.retenciones.retefuentePct)} onChange={(e) => setV('pct', e.target.value === '' ? '' : Number(e.target.value))} style={{ width: 110 }} /></td>
+                <td>{editar ? <SelectCuenta value={v.cuenta || ''} onChange={(x) => setV('cuenta', x)} placeholder={'Vacío = ' + c.retefuente.cuenta} /> : <span className="mono">{v.cuenta || c.retefuente.cuenta}</span>}</td>
+              </tr>
+            );
+          })}</tbody>
         </table></div>
+        <div style={{ marginTop: 12 }}><Nota>Las cuentas de ingreso, gasto, cuenta por pagar e inventario de cada grupo se asignan en Productos y servicios › Grupos. Los porcentajes sugeridos (compras 2,5 %, servicios 4 %, honorarios 11 %) cambian según la base y el tipo de contribuyente: confírmelos con su contador.</Nota></div>
       </Panel>
       <Nota>Cuentas sugeridas del PUC (Decreto 2650 de 1993) para un prestador de servicios de salud. Si su empresa usa un catálogo propio bajo NIIF, cárguelo en Plan de cuentas y elija aquí sus subcuentas. Valide la parametrización y las tarifas de retención con su contador.</Nota>
     </div>

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Ban, Boxes, Download, FileSpreadsheet, ImagePlus, Pencil, Pill, Plus, ScrollText, Snowflake, Stethoscope, Syringe, Trash2, Wrench, Package } from 'lucide-react';
+import { Ban, Boxes, Download, FileSpreadsheet, ImagePlus, Pencil, Pill, Plus, ScrollText, Snowflake, Stethoscope, Syringe, Trash2, Wrench, Package, ShoppingBag } from 'lucide-react';
 import { useStore, C } from '../store.jsx';
 import { SelectBodega, SelectGrupo, SelectTercero } from '../components/Movimientos.jsx';
 import { Btn, Chip, Empty, Errores, Field, Modal, Nota, Panel, SearchBox, Tabs } from '../components/ui.jsx';
@@ -15,12 +15,21 @@ const VACIO = {
   vidaUtilMeses: '', vidaMinRecepcion: '', diasAlertaVence: '',
   vnrUnit: '', ivaPct: '', tarifaIva: '', precioVenta: '', activo: true, bloqueoCompras: false, unidadCompra: '', factorCompra: 1, leadTime: 7, proveedorId: '', proveedores: [], cuentas: {}
 };
+// Qué se puede crear: las clasificaciones de los grupos (como en Dentos). Cada una trae sus valores iniciales.
+const DATOS_CLASIF = {
+  insumo: { clasificacion: 'insumo', categoria: 'insumo', tipoMaterial: 'consumible', requiereInvima: false, riesgo: 'N/A' },
+  producto: { clasificacion: 'producto', categoria: 'insumo', tipoMaterial: 'producto', requiereInvima: false, riesgo: 'N/A' },
+  medicamento: { clasificacion: 'medicamento', categoria: 'medicamento', tipoMaterial: 'medicamento', requiereInvima: true, riesgo: 'N/A' },
+  dispositivo: { clasificacion: 'dispositivo', categoria: 'dispositivo', tipoMaterial: 'dispositivo', requiereInvima: true, riesgo: 'I' },
+  equipo: { clasificacion: 'equipo', categoria: 'dispositivo', tipoMaterial: 'equipo', requiereInvima: true, riesgo: 'IIa', controlaVence: false }
+};
 const TIPOS_CREAR = [
-  ['insumo', 'Insumo', 'Material de consumo (gasas, guantes, cepillos…)', Package, '#22d3ee', '#0ea5e9', { categoria: 'insumo', tipoMaterial: 'consumible', requiereInvima: false, riesgo: 'N/A' }],
-  ['dispositivo', 'Dispositivo médico', 'Con registro INVIMA y clase de riesgo', Syringe, '#a78bfa', '#7c3aed', { categoria: 'dispositivo', tipoMaterial: 'dispositivo', requiereInvima: true, riesgo: 'I' }],
-  ['medicamento', 'Medicamento', 'Con registro INVIMA y código CUM', Pill, '#34d399', '#059669', { categoria: 'medicamento', tipoMaterial: 'medicamento', requiereInvima: true, riesgo: 'N/A' }],
-  ['instrumental', 'Instrumental o equipo', 'Reutilizable, sin vencimiento', Wrench, '#fbbf24', '#f97316', { categoria: 'dispositivo', tipoMaterial: 'instrumental', requiereInvima: true, controlaVence: false }],
-  ['servicio', 'Servicio', 'Procedimiento con precio, CUPS e insumos que consume', Stethoscope, '#f472b6', '#db2777', null]
+  ['insumo', 'Insumo', 'Material de consumo (gasas, guantes, resinas…)', Package, '#22d3ee', '#0ea5e9'],
+  ['producto', 'Producto', 'Para la venta al paciente (cepillos, cremas…)', ShoppingBag, '#fbbf24', '#f97316'],
+  ['medicamento', 'Medicamento', 'Con registro INVIMA y código CUM', Pill, '#34d399', '#059669'],
+  ['dispositivo', 'Dispositivo médico', 'Con registro INVIMA y clase de riesgo', Syringe, '#a78bfa', '#7c3aed'],
+  ['equipo', 'Equipo biomédico', 'Equipos e instrumental de la clínica', Wrench, '#94a3b8', '#475569'],
+  ['servicio', 'Procedimiento o servicio', 'Con precio, CUPS e insumos que consume', Stethoscope, '#f472b6', '#db2777']
 ];
 const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 const SECCIONES = [['ident', 'Identificación'], ['sanitaria', 'Sanitaria'], ['almac', 'Almacenamiento'], ['repos', 'Reposición'], ['provs', 'Proveedores'], ['ventas', 'Precio e IVA'], ['conta', 'Contabilidad'], ['lotes', 'Lotes']];
@@ -52,7 +61,9 @@ export function FormProducto({ inicial, onClose }) {
     const x = Object.assign({}, VACIO, { ubicacion: db.config.ubicaciones[0] || '' }, inicial || {});
     x.proveedores = (x.proveedores || []).map((y) => Object.assign({}, y));
     x.cuentas = Object.assign({}, x.cuentas || {});
-    if (x.tarifaIva === '' && x.ivaPct !== '' && x.ivaPct !== undefined) x.tarifaIva = Number(x.ivaPct) === 19 ? '19' : Number(x.ivaPct) === 5 ? '5' : '';
+    if (x.tarifaIva === '' && x.ivaPct !== '' && x.ivaPct !== undefined && x.id) x.tarifaIva = Number(x.ivaPct) === 19 ? '19' : Number(x.ivaPct) === 5 ? '5' : '';
+    if (!x.clasificacion) x.clasificacion = C.clasificacionProducto(db, x);
+    if (x.tarifaIvaVenta === undefined) x.tarifaIvaVenta = '';
     return x;
   });
   const [err, setErr] = useState([]);
@@ -67,6 +78,10 @@ export function FormProducto({ inicial, onClose }) {
     setF((x) => {
       const n = Object.assign({}, x, { [k]: v });
       if (k === 'categoria') { n.requiereInvima = v !== 'insumo'; if (v === 'medicamento') { n.tipoMaterial = 'medicamento'; n.riesgo = 'N/A'; } }
+      if (k === 'clasificacion') {
+        Object.assign(n, DATOS_CLASIF[v] || {});
+        if (n.grupoId && C.clasificacionGrupo(db, n.grupoId) !== v) n.grupoId = '';
+      }
       if (k === 'cadenaFrio' && v && n.tempMin === '' && n.tempMax === '') { n.tempMin = 2; n.tempMax = 8; }
       if (k === 'implantable' && v) { n.controlaLote = true; n.esteril = true; n.usoUnico = true; }
       if (k === 'controlaLote' && !v) n.controlaVence = false;
@@ -101,6 +116,7 @@ export function FormProducto({ inicial, onClose }) {
       factorCompra: Number(f.factorCompra) || 1, leadTime: Number(f.leadTime) || 0, vnrUnit: nn(f.vnrUnit), precioVenta: nn(f.precioVenta),
       tempMin: nn(f.tempMin), tempMax: nn(f.tempMax), vidaUtilMeses: nn(f.vidaUtilMeses), vidaMinRecepcion: nn(f.vidaMinRecepcion), diasAlertaVence: nn(f.diasAlertaVence), ciclosVida: nn(f.ciclosVida),
       ivaPct: C.pctIva(f.tarifaIva) === null ? '' : C.pctIva(f.tarifaIva),
+      tarifaIvaVenta: f.tarifaIvaVenta || '',
       proveedores: f.proveedores.filter((y) => y.proveedorId).map((y) => ({ proveedorId: y.proveedorId, referencia: String(y.referencia || '').trim(), precio: nn(y.precio), leadTime: nn(y.leadTime) })),
       cuentas: Object.fromEntries(Object.entries(f.cuentas || {}).filter(([, v]) => v))
     });
@@ -143,7 +159,9 @@ export function FormProducto({ inicial, onClose }) {
   };
 
   const opt = (obj, vacio) => <>{vacio !== undefined && <option value="">{vacio}</option>}{Object.entries(obj).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</>;
-  const tituloNuevo = { consumible: 'insumo', dispositivo: 'dispositivo médico', medicamento: 'medicamento', instrumental: 'instrumental o equipo' }[f.tipoMaterial] || 'producto';
+  const tituloNuevo = { insumo: 'insumo', producto: 'producto', medicamento: 'medicamento', dispositivo: 'dispositivo médico', equipo: 'equipo biomédico' }[f.clasificacion] || 'producto';
+  const tarifaGrupoC = f.grupoId ? C.datoGrupo(db, f.grupoId, 'tarifaIvaCompra') : '';
+  const tarifaGrupoV = f.grupoId ? C.datoGrupo(db, f.grupoId, 'tarifaIvaVenta') : '';
   const Sec = ({ id, children, extra }) => <div className="section-title" id={'fp-' + id} style={id === 'ident' ? { marginTop: 0 } : undefined}>{children}{extra}</div>;
 
   return (
@@ -164,8 +182,9 @@ export function FormProducto({ inicial, onClose }) {
           <Field label="Código alterno" hint="Del sistema anterior o del proveedor"><input className="input mono" value={f.codigoAlterno} onChange={set('codigoAlterno')} /></Field>
           <Field label="Nombre o descripción" span><input className="input" value={f.nombre} onChange={set('nombre')} placeholder="Nombre genérico, presentación y tamaño" /></Field>
           <Field label="Nombre comercial"><input className="input" value={f.nombreComercial} onChange={set('nombreComercial')} /></Field>
-          <Field label="Clasificación (línea › grupo › subgrupo)" span hint={db.grupos.length ? '' : 'Cree la clasificación en Productos y servicios › Clasificación'}>
-            <SelectGrupo value={f.grupoId} onChange={setV('grupoId')} placeholder="Escriba la línea, grupo o subgrupo…" />
+          <Field label="Clasificación *"><select className="select input" value={f.clasificacion} onChange={set('clasificacion')}>{C.CLASIF_PRODUCTO.map((k) => <option key={k} value={k}>{C.CLASIFICACIONES[k]}</option>)}</select></Field>
+          <Field label="Grupo" span hint={db.grupos.some((g) => C.clasificacionGrupo(db, g.id) === f.clasificacion) ? (f.grupoId && C.datoGrupo(db, f.grupoId, 'manejaEsterilizacion') ? 'Este grupo maneja esterilización' : 'Solo aparecen los grupos de ' + C.CLASIFICACIONES[f.clasificacion].toLowerCase()) : 'No hay grupos de ' + C.CLASIFICACIONES[f.clasificacion].toLowerCase() + ': créelos en Productos y servicios › Grupos'}>
+            <SelectGrupo value={f.grupoId} onChange={setV('grupoId')} clasificaciones={[f.clasificacion]} placeholder="Escriba el grupo…" />
           </Field>
           <Field label="Tipo de material"><select className="select input" value={f.tipoMaterial} onChange={set('tipoMaterial')}>{opt(C.TIPOS_MATERIAL)}</select></Field>
           <Field label="Categoría sanitaria"><select className="select input" value={f.categoria} onChange={set('categoria')}>{opt(C.CATEGORIAS)}</select></Field>
@@ -280,8 +299,11 @@ export function FormProducto({ inicial, onClose }) {
 
       <Sec id="ventas">Precio de venta e IVA</Sec>
       <div className="form-grid">
-        <Field label="Tratamiento de IVA" hint="Medicamentos y varios dispositivos médicos están excluidos (ET art. 424). Confírmelo con su contador.">
-          <select className="select input" value={f.tarifaIva} onChange={set('tarifaIva')}>{opt(C.TARIFAS_IVA, 'Sin definir (usa el IVA general de la factura)')}</select>
+        <Field label="IVA en compras" hint="Medicamentos y varios dispositivos médicos están excluidos (ET art. 424). Confírmelo con su contador.">
+          <select className="select input" value={f.tarifaIva} onChange={set('tarifaIva')}>{opt(C.TARIFAS_IVA, tarifaGrupoC ? 'La del grupo: ' + C.TARIFAS_IVA[tarifaGrupoC] : 'Sin definir (usa el IVA general de la factura)')}</select>
+        </Field>
+        <Field label="IVA en ventas">
+          <select className="select input" value={f.tarifaIvaVenta} onChange={set('tarifaIvaVenta')}>{opt(Object.fromEntries(Object.entries(C.TARIFAS_IVA).filter(([k]) => k !== '19nd')), tarifaGrupoV ? 'La del grupo: ' + C.TARIFAS_IVA[tarifaGrupoV] : 'Sin definir')}</select>
         </Field>
         <Field label="Precio de venta o tarifa" hint="Si el insumo se factura al paciente o se vende"><input className="input" type="number" min="0" value={f.precioVenta} onChange={set('precioVenta')} placeholder="Opcional" /></Field>
         <Field label="Costo promedio actual"><input className="input" value={money(costoProm)} readOnly /></Field>
@@ -357,18 +379,18 @@ export default function Productos({ arg }) {
   const enGrupo = grupo !== 'todos' && grupo !== 'sin' ? C.gruposDescendientes(db, grupo) : null;
   const lista = db.productos.filter((p) =>
     (estado === 'todos' || (estado === 'activos' ? p.activo !== false : p.activo === false)) &&
-    (tipo === 'todos' || (p.tipoMaterial || 'consumible') === tipo) &&
+    (tipo === 'todos' || C.clasificacionProducto(db, p) === tipo) &&
     (grupo === 'todos' || (grupo === 'sin' ? !C.rutaGrupo(db, p.grupoId) : enGrupo.has(p.grupoId))) &&
     norm([p.nombre, p.nombreComercial, p.codigo, p.codigoAlterno, p.invima, p.gtin, p.marca, p.referencia, p.cum, p.principioActivo, p.fabricante, C.rutaGrupo(db, p.grupoId)].join(' ')).includes(norm(q)))
     .sort((a, b) => a.nombre.localeCompare(b.nombre));
 
   const exportar = () => {
     // Mismas columnas que la plantilla de carga: el archivo exportado se puede corregir y volver a cargar.
-    const rows = [['Código', 'Código alterno', 'Nombre', 'Categoría', 'Tipo de material', 'Clasificación', 'Marca', 'Referencia', 'Fabricante', 'Presentación', 'Unidad', 'Unidad de compra', 'Factor', 'Stock mínimo', 'Stock máximo', 'Proveedor', 'Días de entrega', 'Tarifa IVA', 'Precio de venta', 'Ubicación física', 'Registro INVIMA', 'Vence INVIMA', 'Riesgo', 'GTIN', 'Principio activo', 'Concentración', 'Forma farmacéutica', 'CUM', 'Cadena de frío', 'Implantable', 'Existencia', 'Costo promedio', 'Valor', 'Activo']];
+    const rows = [['Código', 'Código alterno', 'Nombre', 'Categoría', 'Tipo de material', 'Clasificación', 'Grupo', 'Marca', 'Referencia', 'Fabricante', 'Presentación', 'Unidad', 'Unidad de compra', 'Factor', 'Stock mínimo', 'Stock máximo', 'Proveedor', 'Días de entrega', 'Tarifa IVA', 'Precio de venta', 'Ubicación física', 'Registro INVIMA', 'Vence INVIMA', 'Riesgo', 'GTIN', 'Principio activo', 'Concentración', 'Forma farmacéutica', 'CUM', 'Cadena de frío', 'Implantable', 'Existencia', 'Costo promedio', 'Valor', 'Activo']];
     lista.forEach((p) => {
       const s = state.prods[p.id];
       const pv = db.proveedores.find((t) => t.id === p.proveedorId);
-      rows.push([p.codigo, p.codigoAlterno || '', p.nombre, C.CATEGORIAS[p.categoria], C.TIPOS_MATERIAL[p.tipoMaterial] || '', C.rutaGrupo(db, p.grupoId), p.marca || '', p.referencia || '', p.fabricante || '', p.presentacion || '', p.unidad, p.unidadCompra || '', p.factorCompra || 1, p.stockMin, p.stockMax || '', pv ? pv.nit : '', p.leadTime || '', p.tarifaIva ? C.TARIFAS_IVA[p.tarifaIva] : '', p.precioVenta || '', p.ubicacionFisica || '', p.invima || '', p.invimaVence || '', p.riesgo, p.gtin || '', p.principioActivo || '', p.concentracion || '', p.formaFarmaceutica ? C.FORMAS_FARMACEUTICAS[p.formaFarmaceutica] : '', p.cum || '', p.cadenaFrio ? 'Sí' : 'No', p.implantable ? 'Sí' : 'No', s ? s.qty : 0, s && s.qty ? C.r2(s.value / s.qty) : 0, s ? s.value : 0, p.activo !== false ? 'Sí' : 'No']);
+      rows.push([p.codigo, p.codigoAlterno || '', p.nombre, C.CATEGORIAS[p.categoria], C.TIPOS_MATERIAL[p.tipoMaterial] || '', C.CLASIFICACIONES[C.clasificacionProducto(db, p)], (db.grupos.find((g) => g.id === p.grupoId) || {}).nombre || '', p.marca || '', p.referencia || '', p.fabricante || '', p.presentacion || '', p.unidad, p.unidadCompra || '', p.factorCompra || 1, p.stockMin, p.stockMax || '', pv ? pv.nit : '', p.leadTime || '', p.tarifaIva ? C.TARIFAS_IVA[p.tarifaIva] : '', p.precioVenta || '', p.ubicacionFisica || '', p.invima || '', p.invimaVence || '', p.riesgo, p.gtin || '', p.principioActivo || '', p.concentracion || '', p.formaFarmaceutica ? C.FORMAS_FARMACEUTICAS[p.formaFarmaceutica] : '', p.cum || '', p.cadenaFrio ? 'Sí' : 'No', p.implantable ? 'Sí' : 'No', s ? s.qty : 0, s && s.qty ? C.r2(s.value / s.qty) : 0, s ? s.value : 0, p.activo !== false ? 'Sí' : 'No']);
     });
     descargar('productos-' + hoy + '.csv', C.csv(rows));
   };
@@ -378,10 +400,10 @@ export default function Productos({ arg }) {
       actions={<><Btn icon={Download} onClick={exportar}>Exportar</Btn>{puede('importar') && <Btn icon={FileSpreadsheet} onClick={() => go('importar', 'productos')} title="Crear o actualizar muchos productos y sus existencias con un archivo Excel o CSV">Cargar desde Excel</Btn>}{puede('maestros') && <Btn variant="primary" icon={Plus} onClick={() => setElegir(true)}>Nuevo</Btn>}</>}>
       <div className="toolbar">
         <SearchBox value={q} onChange={setQ} placeholder="Nombre, código, marca, referencia, principio activo, código de barras, INVIMA" />
-        <div style={{ width: 300, maxWidth: '100%' }}><SelectGrupo value={grupo} onChange={setGrupo} incluirTodos incluirSin /></div>
+        <div style={{ width: 300, maxWidth: '100%' }}><SelectGrupo value={grupo} onChange={setGrupo} incluirTodos incluirSin clasificaciones={C.CLASIF_PRODUCTO} /></div>
         <select className="select input" value={tipo} onChange={(e) => setTipo(e.target.value)} style={{ maxWidth: 230 }}>
-          <option value="todos">Todos los tipos de material</option>
-          {Object.entries(C.TIPOS_MATERIAL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          <option value="todos">Todas las clasificaciones</option>
+          {C.CLASIF_PRODUCTO.map((k) => <option key={k} value={k}>{C.CLASIFICACIONES[k]}</option>)}
         </select>
         <Tabs value={estado} onChange={setEstado} options={[['activos', 'Activos'], ['inactivos', 'Inactivos'], ['todos', 'Todos']]} />
       </div>
@@ -416,7 +438,7 @@ export default function Productos({ arg }) {
                         )}
                       </div>
                     </div></td>
-                    <td className="small">{C.rutaGrupo(db, p.grupoId) || <span className="muted">Sin clasificar</span>}<div className="muted">{C.TIPOS_MATERIAL[p.tipoMaterial] || C.CATEGORIAS[p.categoria]}</div></td>
+                    <td className="small">{C.rutaGrupo(db, p.grupoId) || <span className="muted">Sin grupo</span>}<div className="muted">{C.CLASIFICACIONES[C.clasificacionProducto(db, p)]}</div></td>
                     <td className={'num' + (bajo ? ' red-t' : '')}>{num(qty)} <span className="muted small">{p.unidad}</span><div className="small muted">mín. {num(p.stockMin)}{p.stockMax ? ' · máx. ' + num(p.stockMax) : ''}</div></td>
                     <td className="num">{money(qty > 0 ? s.value / qty : s?.ultimoCosto || 0)}</td>
                     <td className="num">{money(s ? s.value : 0)}</td>
@@ -436,16 +458,16 @@ export default function Productos({ arg }) {
       {elegir && (
         <Modal open title="¿Qué desea crear?" icon={Plus} onClose={() => setElegir(false)}>
           <div className="choose">
-            {TIPOS_CREAR.map(([k, t, s, Icon, c1, c2, datos]) => (
+            {TIPOS_CREAR.map(([k, t, s, Icon, c1, c2]) => (
               <button key={k} type="button" className="tile" style={{ '--c1': c1, '--c2': c2 }}
-                onClick={() => { setElegir(false); if (k === 'servicio') go('kits', 'nuevo'); else setEditar(datos); }}>
+                onClick={() => { setElegir(false); if (k === 'servicio') go('kits', 'nuevo'); else setEditar(Object.assign({}, DATOS_CLASIF[k])); }}>
                 <span className="orb"><Icon size={34} strokeWidth={1.7} /></span>
                 <span className="tile-t">{t}</span>
                 <span className="tile-s">{s}</span>
               </button>
             ))}
           </div>
-          <div style={{ marginTop: 16 }}><Nota>Los insumos, dispositivos, medicamentos e instrumental tienen existencias, lotes y kardex. Los servicios no tienen existencia: tienen precio, código CUPS y los insumos que consumen.</Nota></div>
+          <div style={{ marginTop: 16 }}><Nota>Son las mismas clasificaciones de los grupos. Insumos, productos, medicamentos, dispositivos y equipos tienen existencias, lotes y kardex; los procedimientos y servicios no tienen existencia: tienen precio, código CUPS y los insumos que consumen.</Nota></div>
         </Modal>
       )}
     </Panel>

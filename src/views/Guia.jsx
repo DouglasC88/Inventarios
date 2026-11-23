@@ -24,7 +24,7 @@ const ARTICULOS = [
   ['productos', 'Cómo crear un producto o insumo con sus lotes', ['productos', 'nuevo'], [
     'Menú Productos y servicios › Productos › "Nuevo": elija qué va a crear (insumo, dispositivo médico, medicamento, instrumental o equipo, o servicio).',
     'Los botones de arriba de la ficha llevan a cada sección. Los campos con * son obligatorios.',
-    'Identificación: código, nombre, nombre comercial, clasificación, marca, referencia, fabricante, presentación, código de barras (se valida el dígito GS1) y foto.',
+    'Identificación: código, nombre, nombre comercial, clasificación y grupo (solo salen los grupos de esa clasificación), marca, referencia, fabricante, presentación, código de barras (se valida el dígito GS1) y foto.',
     'Sanitaria: registro INVIMA y su vencimiento. Medicamento: principio activo, concentración, forma farmacéutica, vía, CUM, ATC y control especial. Dispositivo: uso único o reutilizable, esterilidad e implantable (exige salida a un paciente).',
     'Almacenamiento: unidad, bodega, ubicación física, lote y vencimiento, temperatura, luz, vida útil, vida útil mínima al recibir (las entradas con menos días se rechazan) y días de alerta propios.',
     'Reposición: política (según consumo, mínimo y máximo, o manual), mínimo, seguridad, punto de reorden, máximo, cantidad mínima de pedido y unidad de compra.',
@@ -35,16 +35,21 @@ const ARTICULOS = [
   ]],
   ['productos', 'Cómo crear un servicio y los insumos que consume', ['kits', 'nuevo'], [
     'Menú Productos y servicios › Servicios › "Nuevo servicio".',
-    'Escriba código, nombre, categoría, código CUPS, precio e IVA.',
+    'Escriba código, nombre, grupo (de procedimientos o servicios), código CUPS, precio y tarifa de IVA (o la del grupo).',
     'Agregue cada insumo y la cantidad que consume por servicio (se admiten fracciones, como 0,25 de jeringa).',
     'El sistema muestra el costo de insumos y el margen frente al precio.',
     'En Salidas elija el servicio y cuántas veces se hizo: se descuentan todos sus insumos por lote.'
   ]],
-  ['productos', 'Cómo crear la clasificación (línea, grupo y subgrupo)', ['grupos', 'nuevo'], [
-    'Menú Productos y servicios › Clasificación › "Nueva línea" (por ejemplo, Operatoria).',
-    'En la fila de la línea pulse "+ Grupo" (Resinas y adhesivos) y en el grupo "+ Subgrupo" (Resinas compuestas).',
-    'Asigne a cada producto el nivel más específico. Los filtros y reportes por línea incluyen sus grupos y subgrupos.'
+  ['productos', 'Cómo crear los grupos (insumos, productos, medicamentos, procedimientos y servicios)', ['grupos', 'nuevo'], [
+    'Menú Productos y servicios › Grupos › "Nuevo grupo".',
+    'Clasificación: elija si el grupo es de insumos, productos, medicamentos, dispositivos médicos, equipos biomédicos, procedimientos o servicios. Puede haber dos grupos con el mismo nombre y distinta clasificación (por ejemplo, Endodoncia procedimiento y Endodoncia insumo).',
+    'Tipo de concepto: define la retención en la fuente de sus compras (compras generales, servicios, honorarios…). El porcentaje y la cuenta de cada concepto están en Contabilidad › Parametrización.',
+    'Tarifa IVA compra y venta: excluido, exento, 5 %, 19 % o 19 % mayor valor del gasto (no descontable). Los productos y servicios del grupo la toman si no tienen la suya.',
+    'Cuentas contables: ingreso, gasto, cuenta por pagar e inventario. Vacío = la de la parametrización.',
+    'Marque si maneja esterilización y, si quiere, la posición del grupo en los informes.',
+    'Opcional: con "+ Subgrupo" divide un grupo (Ortodoncia › Brackets). El subgrupo hereda la clasificación y lo que deje vacío.'
   ]],
+
   ['productos', 'Cómo crear un lote y registrar su vencimiento', ['lotes', 'nuevo'], [
     'Desde la ficha del producto (sección Lotes y existencia inicial) o en Productos y servicios › Lotes › "Nuevo lote".',
     'También se crea solo al registrar una entrada: número de lote y fecha de vencimiento en la línea.',

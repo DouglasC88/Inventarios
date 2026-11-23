@@ -28,7 +28,13 @@ function normalizar(d) {
   if (!Array.isArray(d.servicios) && db.kits.length) db.servicios = db.kits.map((k) => Object.assign({ categoria: '', cups: '', precio: '', ivaPct: '', duracion: '', activo: true }, k));
   db.config.contabilidad = Object.assign(C.cuentasBase(), (d.config || {}).contabilidad || {});
   db.config.contabilidad.retenciones = Object.assign(C.cuentasBase().retenciones, ((d.config || {}).contabilidad || {}).retenciones || {});
+  db.config.contabilidad.retenciones.porConcepto = Object.assign(C.retencionesPorConceptoBase(), db.config.contabilidad.retenciones.porConcepto || {});
   if (!Array.isArray(d.planCuentas) || !d.planCuentas.length) db.planCuentas = C.planCuentasBase();
+  else {
+    // Cuentas nuevas del plan base (ingresos y retención por concepto) que no existían en datos anteriores.
+    C.planCuentasBase().filter((c) => ['41', '4135', '4165', '236505', '236515', '236525'].includes(c.codigo) && !db.planCuentas.some((x) => x.codigo === c.codigo)).forEach((c) => db.planCuentas.push(c));
+  }
+  C.migrarClasificacion(db);
   // Datos anteriores a la cuenta puente: las compras ya registradas se tomaban contra proveedores.
   if (d.config && d.config.contabilidad && d.config.contabilidad.usarPuente === undefined) db.config.contabilidad.usarPuente = false;
   if (!Array.isArray(d.lotes)) C.ordenar(db.movimientos).forEach((m) => { if (!m.anulado) C.asegurarLotes(db, m); });

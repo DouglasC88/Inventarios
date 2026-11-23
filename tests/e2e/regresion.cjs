@@ -70,12 +70,13 @@ const { chromium } = require('playwright');
   await p.locator('.modal input').nth(0).fill('C3'); await p.locator('.modal input').nth(1).fill('Consultorio 3');
   await p.click('.modal-foot >> text=Guardar'); await res('bodega');
   await p.goto(URL + '#/grupos/nuevo'); await p.waitForTimeout(250);
-  await p.locator('.modal input.mono').fill('08'); await p.locator('.modal input[placeholder="Ej.: Endodoncia"]').fill('Endodoncia');
-  await p.click('.modal-foot >> text=Guardar'); await res('línea de clasificación');
+  await p.locator('.modal .field:has(label:text-is("Clasificación *")) select').selectOption('insumo');
+  await p.locator('.modal input.mono').fill('11'); await p.locator('.modal input[placeholder="Ej.: Endodoncia"]').fill('Ortodoncia');
+  await p.click('.modal-foot >> text=Guardar'); await res('grupo de insumos');
   await p.goto(URL + '#/grupos'); await p.waitForTimeout(250);
-  await p.locator('.tbl tbody tr', { hasText: 'Endodoncia' }).locator('button', { hasText: 'Grupo' }).click(); await p.waitForTimeout(200);
-  await p.locator('.modal input.mono').fill('0801'); await p.locator('.modal input[placeholder="Ej.: Endodoncia"]').fill('Limas');
-  await p.click('.modal-foot >> text=Guardar'); await res('grupo dentro de la línea');
+  await p.locator('.tbl tbody tr', { hasText: 'Ortodoncia' }).locator('button', { hasText: 'Subgrupo' }).click(); await p.waitForTimeout(200);
+  await p.locator('.modal input.mono').fill('1101'); await p.locator('.modal input[placeholder="Ej.: Endodoncia"]').fill('Brackets');
+  await p.click('.modal-foot >> text=Guardar'); await res('subgrupo (hereda)');
   await p.goto(URL + '#/productos'); await p.waitForTimeout(250);
   await combo(p.locator('.toolbar .combo input').first(), 'Anestesia');
   console.log('productos de línea Anestesia'.padEnd(28), '|', await p.locator('.tbl tbody tr').count());
@@ -111,6 +112,23 @@ const { chromium } = require('playwright');
   await p.click('.modal-foot >> text=Guardar'); await res('producto con 2 lotes');
   await p.goto(URL + '#/existencias/q:GAS-10'); await p.waitForTimeout(300);
   console.log('existencia GAS-10'.padEnd(28), '|', await p.locator('.prod-card .pc-stock b').first().textContent());
+  // Grupos como en Dentos: el mismo nombre con distinta clasificación
+  for (const [clas, cod] of [['procedimiento', 'P90'], ['insumo', '90']]) {
+    await p.goto(URL + '#/grupos'); await p.waitForTimeout(300);
+    await p.click('text=Nuevo grupo'); await p.waitForTimeout(200);
+    await p.locator('.modal .field:has(label:text-is("Clasificación *")) select').selectOption(clas);
+    await p.locator('.modal .field:has(label:text-is("Tipo de concepto")) select').selectOption(clas === 'insumo' ? 'compras' : 'servicios');
+    await p.locator('.modal .field:has(label:text-is("Tarifa IVA venta")) select').selectOption('excluido');
+    await p.locator('.modal .field:has(label:text-is("Código *")) input').fill(cod);
+    await p.locator('.modal .field:has(label:text-is("Descripción *")) input').fill('Endodoncia');
+    await p.click('.modal-foot >> text=Guardar'); await res('grupo Endodoncia ' + clas);
+  }
+  console.log('grupos de procedimiento'.padEnd(28), '|', (await p.locator('.tabs button, .tabs a').allTextContents()).filter((x) => /Procedimiento|Insumo/.test(x)).join(' · '));
+  await p.goto(URL + '#/kits/nuevo'); await p.waitForTimeout(300);
+  await p.locator('.modal input.mono').first().fill('SRV-END1'); await p.locator('.modal .field:has(label:text-is("Nombre del servicio")) input').fill('Endodoncia unirradicular');
+  await combo(p.locator('.modal .field:has(label:text-is("Grupo *")) .combo input'), 'Endodoncia');
+  console.log('IVA del servicio (grupo)'.padEnd(28), '|', await p.locator('.modal .field:has(label:text-is("Tarifa IVA venta")) option').first().textContent());
+  await p.click('.modal-foot >> text=Guardar'); await res('servicio con grupo');
   // Medicamento: exige principio activo, concentración y forma farmacéutica
   await p.goto(URL + '#/productos/nuevo'); await p.waitForTimeout(300);
   await p.locator('.choose .tile', { hasText: 'Medicamento' }).first().click(); await p.waitForTimeout(300);
@@ -119,7 +137,7 @@ const { chromium } = require('playwright');
   await p.click('.modal-foot >> text=Guardar'); await res('medicamento incompleto');
   await fp('Principio activo *').fill('Articaína clorhidrato + epinefrina'); await fp('Concentración *').fill('4 % + 1:100.000');
   await p.locator('.modal .field:has(label:text-is("Forma farmacéutica *")) select').selectOption('cartucho');
-  await p.locator('.modal .field:has(label:text-is("Tratamiento de IVA")) select').selectOption('excluido');
+  await p.locator('.modal .field:has(label:text-is("IVA en compras")) select').selectOption('excluido');
   await fp('GTIN / código de barras').fill('7501031311309');
   await p.click('.modal-foot >> text=Guardar'); await res('medicamento completo');
   // Orden de compra con precio pactado (RES-A3 tiene 44.000 con Dental Andina)

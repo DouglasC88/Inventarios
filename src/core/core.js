@@ -175,10 +175,10 @@ const PUC_BASE = [
   ['14', 'INVENTARIOS', 'D'], ['1435', 'Mercancías no fabricadas por la empresa', 'D'], ['1455', 'Materiales, repuestos y accesorios', 'D'], ['1499', 'Provisiones', 'C'],
   ['2', 'PASIVO', 'C'], ['22', 'PROVEEDORES', 'C'], ['2205', 'Nacionales', 'C', true],
   ['23', 'CUENTAS POR PAGAR', 'C'], ['2335', 'Costos y gastos por pagar', 'C', true], ['233595', 'Otros (mercancía recibida por facturar)', 'C', true],
-  ['2365', 'Retención en la fuente', 'C', true], ['236540', 'Compras', 'C', true], ['2367', 'Impuesto a las ventas retenido', 'C', true], ['2368', 'Impuesto de industria y comercio retenido', 'C', true],
+  ['2365', 'Retención en la fuente', 'C', true], ['236505', 'Salarios y pagos laborales', 'C', true], ['236515', 'Honorarios', 'C', true], ['236525', 'Servicios', 'C', true], ['236540', 'Compras', 'C', true], ['2367', 'Impuesto a las ventas retenido', 'C', true], ['2368', 'Impuesto de industria y comercio retenido', 'C', true],
   ['24', 'IMPUESTOS, GRAVÁMENES Y TASAS', 'C'], ['2408', 'Impuesto sobre las ventas por pagar', 'C', true],
   ['3', 'PATRIMONIO', 'C'], ['37', 'RESULTADOS DE EJERCICIOS ANTERIORES', 'C'], ['3705', 'Utilidades acumuladas', 'C'],
-  ['4', 'INGRESOS', 'C'], ['42', 'NO OPERACIONALES', 'C'], ['4250', 'Recuperaciones', 'C'], ['4295', 'Diversos', 'C'],
+  ['4', 'INGRESOS', 'C'], ['41', 'OPERACIONALES', 'C'], ['4135', 'Comercio al por mayor y al por menor', 'C'], ['4165', 'Servicios sociales y de salud', 'C'], ['42', 'NO OPERACIONALES', 'C'], ['4250', 'Recuperaciones', 'C'], ['4295', 'Diversos', 'C'],
   ['5', 'GASTOS', 'D'], ['51', 'OPERACIONALES DE ADMINISTRACIÓN', 'D'], ['5199', 'Provisiones', 'D'], ['53', 'NO OPERACIONALES', 'D'], ['5315', 'Gastos extraordinarios', 'D'],
   ['6', 'COSTOS DE VENTAS', 'D'], ['61', 'COSTO DE VENTAS Y DE PRESTACIÓN DE SERVICIOS', 'D'], ['6135', 'Comercio al por mayor y al por menor', 'D'], ['6155', 'Servicios sociales y de salud', 'D']
 ];
@@ -201,6 +201,7 @@ function esDeMovimiento(db, codigo) {
 
 const CONCEPTOS_CONTABLES = {
   inventario: 'Inventario de materiales e insumos',
+  ingreso: 'Ingresos por servicios o ventas',
   puente: 'Mercancía recibida por facturar (cuenta puente)',
   proveedores: 'Proveedores nacionales',
   ivaDescontable: 'IVA descontable en compras',
@@ -222,6 +223,7 @@ function cuentasBase() {
   const c = (cuenta, nombre) => ({ cuenta, nombre });
   return {
     inventario: c('1455', 'Materiales, repuestos y accesorios'),
+    ingreso: c('4165', 'Servicios sociales y de salud'),
     puente: c('233595', 'Otros (mercancía recibida por facturar)'),
     proveedores: c('2205', 'Nacionales'),
     ivaDescontable: c('2408', 'Impuesto sobre las ventas por pagar'),
@@ -240,9 +242,124 @@ function cuentasBase() {
     apertura: c('3705', 'Utilidades acumuladas'),
     centroCostoPorBodega: true,
     usarPuente: true,
-    retenciones: { retefuentePct: 2.5, reteivaPct: 15, reteicaPct: 0 }
+    retenciones: { retefuentePct: 2.5, reteivaPct: 15, reteicaPct: 0, porConcepto: retencionesPorConceptoBase() }
   };
 }
+// ---------- Grupos (clasificación de procedimientos, productos, insumos y servicios) ----------
+/** Clasificación de cada grupo. Las de productos tienen existencias; las de servicios no. */
+const CLASIFICACIONES = { insumo: 'Insumo', producto: 'Producto', medicamento: 'Medicamentos', dispositivo: 'Dispositivos médicos', equipo: 'Equipos biomédicos', procedimiento: 'Procedimiento', servicio: 'Servicio' };
+const CLASIF_PRODUCTO = ['insumo', 'producto', 'medicamento', 'dispositivo', 'equipo'];
+const CLASIF_SERVICIO = ['procedimiento', 'servicio'];
+/** Tipo de concepto del grupo: define la retención en la fuente que se practica (subcuentas 2365 del PUC). */
+const CONCEPTOS_RETENCION = { general: 'General', compras: 'Compras generales', servicios: 'Servicios', honorarios: 'Honorarios', costos: 'Costos', legales: 'Legales', empleados: 'Empleados' };
+/** Tarifas y cuentas sugeridas por concepto. Vacío = la retención general. Valídelas con su contador cada año. */
+function retencionesPorConceptoBase() {
+  return {
+    general: { pct: '', cuenta: '' }, compras: { pct: 2.5, cuenta: '236540' }, servicios: { pct: 4, cuenta: '236525' }, honorarios: { pct: 11, cuenta: '236515' },
+    costos: { pct: '', cuenta: '' }, legales: { pct: '', cuenta: '' }, empleados: { pct: '', cuenta: '236505' }
+  };
+}
+const grupoPorId = (db, id) => (id ? db.grupos.find((g) => g.id === id) : null);
+/** Grupo de primer nivel (línea) de un grupo. */
+function grupoRaiz(db, id) {
+  let g = grupoPorId(db, id), guard = 0;
+  while (g && g.parentId && guard++ < 10) { const p = grupoPorId(db, g.parentId); if (!p) break; g = p; }
+  return g;
+}
+/** Dato de un grupo heredado de su grupo padre o de su línea cuando está vacío. */
+function datoGrupo(db, id, campo) {
+  let g = grupoPorId(db, id), guard = 0;
+  while (g && guard++ < 10) {
+    const v = g[campo];
+    if (v !== undefined && v !== null && v !== '' && v !== false) return v;
+    g = grupoPorId(db, g.parentId);
+  }
+  return '';
+}
+/** La clasificación la define la línea: sus grupos y subgrupos la heredan. */
+function clasificacionGrupo(db, id) { const r = grupoRaiz(db, id); return r ? r.clasificacion || '' : ''; }
+/** Clasificación de un producto: la propia, la de su grupo o la que corresponde a su tipo de material. */
+function clasificacionProducto(db, p) {
+  if (!p) return '';
+  if (p.clasificacion) return p.clasificacion;
+  const g = clasificacionGrupo(db, p.grupoId);
+  if (g && CLASIF_PRODUCTO.includes(g)) return g;
+  if (p.categoria === 'medicamento' || p.tipoMaterial === 'medicamento') return 'medicamento';
+  if (p.tipoMaterial === 'equipo' || p.tipoMaterial === 'activo') return 'equipo';
+  if (p.tipoMaterial === 'producto') return 'producto';
+  if (p.categoria === 'dispositivo' || ['dispositivo', 'instrumental'].includes(p.tipoMaterial)) return 'dispositivo';
+  return 'insumo';
+}
+/** Valida un grupo antes de guardarlo. */
+function validarGrupo(db, g) {
+  const e = [];
+  const codigo = String(g.codigo || '').trim().toUpperCase();
+  if (!codigo) e.push('El código es obligatorio.');
+  else if (db.grupos.some((x) => x.id !== g.id && String(x.codigo).toUpperCase() === codigo)) e.push('Ya existe un grupo con ese código.');
+  if (!String(g.nombre || '').trim()) e.push('La descripción es obligatoria.');
+  const padre = grupoPorId(db, g.parentId);
+  if (g.parentId && !padre) e.push('El grupo padre no existe.');
+  if (g.id && g.parentId && gruposDescendientes(db, g.id).has(g.parentId)) e.push('Un grupo no puede quedar dentro de sí mismo.');
+  const clas = padre ? clasificacionGrupo(db, padre.id) : g.clasificacion;
+  if (!padre && !CLASIFICACIONES[g.clasificacion]) e.push('Elija la clasificación (insumo, producto, medicamento, servicio…).');
+  if (db.grupos.some((x) => x.id !== g.id && (x.parentId || '') === (g.parentId || '') && norm(x.nombre) === norm(g.nombre) && (padre || x.clasificacion === g.clasificacion))) e.push('Ya existe un grupo "' + g.nombre + '" con esa clasificación.');
+  if (g.conceptoRetencion && !CONCEPTOS_RETENCION[g.conceptoRetencion]) e.push('El tipo de concepto no es válido.');
+  ['tarifaIvaCompra', 'tarifaIvaVenta'].forEach((k) => { if (g[k] && !TARIFAS_IVA[g[k]]) e.push('Elija una tarifa de IVA válida.'); });
+  Object.entries(g.cuentas || {}).forEach(([k, c]) => {
+    if (!c) return;
+    if (!cuentaPlan(db, c)) e.push('La cuenta ' + c + ' (' + (CONCEPTOS_CONTABLES[k] || k) + ') no existe en el plan de cuentas.');
+    else if (!esDeMovimiento(db, c)) e.push('La cuenta ' + c + ' tiene subcuentas; elija una cuenta de movimiento.');
+  });
+  if (g.id && !padre && g.clasificacion) {
+    const usados = gruposDescendientes(db, g.id);
+    const esServ = CLASIF_SERVICIO.includes(g.clasificacion);
+    if (!esServ && (db.servicios || []).some((x) => usados.has(x.grupoId))) e.push('Tiene servicios asignados: su clasificación debe ser procedimiento o servicio.');
+    if (esServ && db.productos.some((x) => usados.has(x.grupoId))) e.push('Tiene productos asignados: su clasificación no puede ser procedimiento ni servicio.');
+  }
+  if (g.orden !== '' && g.orden !== undefined && g.orden !== null && !(Number(g.orden) >= 0)) e.push('La posición en informes debe ser un número.');
+  void clas;
+  return e;
+}
+/** Valida un servicio o procedimiento. */
+function validarServicio(db, sv) {
+  const e = [];
+  const cod = String(sv.codigo || '').trim();
+  if (!cod) e.push('El código es obligatorio.');
+  else if ((db.servicios || []).some((k) => k.id !== sv.id && String(k.codigo).toUpperCase() === cod.toUpperCase())) e.push('Ya existe un servicio con ese código.');
+  if (!String(sv.nombre || '').trim()) e.push('El nombre del servicio es obligatorio.');
+  if (!sv.grupoId) e.push('Elija el grupo del servicio.');
+  else if (!CLASIF_SERVICIO.includes(clasificacionGrupo(db, sv.grupoId))) e.push('El grupo elegido no es de procedimientos ni de servicios.');
+  if (sv.precio !== '' && sv.precio !== undefined && Number(sv.precio) < 0) e.push('El precio no puede ser negativo.');
+  if (sv.tarifaIvaVenta && !TARIFAS_IVA[sv.tarifaIvaVenta]) e.push('Elija la tarifa de IVA.');
+  return e;
+}
+/**
+ * Datos anteriores: asigna la clasificación a las líneas según sus productos y convierte la categoría
+ * escrita de cada servicio en un grupo de clasificación "procedimiento".
+ */
+function migrarClasificacion(db) {
+  db.grupos.forEach((g) => { if (g.activo === undefined) g.activo = true; });
+  db.grupos.filter((g) => !g.parentId && !g.clasificacion).forEach((g) => {
+    const ids = gruposDescendientes(db, g.id);
+    const cuenta = {};
+    db.productos.filter((p) => ids.has(p.grupoId)).forEach((p) => { const c = clasificacionProducto(db, Object.assign({}, p, { grupoId: '' })); cuenta[c] = (cuenta[c] || 0) + 1; });
+    if ((db.servicios || []).some((x) => ids.has(x.grupoId))) cuenta.procedimiento = 1e6;
+    g.clasificacion = Object.keys(cuenta).sort((a, b) => cuenta[b] - cuenta[a])[0] || 'insumo';
+  });
+  (db.servicios || []).forEach((sv) => {
+    if (sv.grupoId || !String(sv.categoria || '').trim()) return;
+    let g = db.grupos.find((x) => !x.parentId && x.clasificacion === 'procedimiento' && norm(x.nombre) === norm(sv.categoria));
+    if (!g) {
+      let n = db.grupos.length + 1, cod;
+      do { cod = 'SV' + String(n++).padStart(2, '0'); } while (db.grupos.some((x) => x.codigo === cod));
+      g = { id: 'gs-' + nuevoId(), codigo: cod, nombre: String(sv.categoria).trim(), clasificacion: 'procedimiento', activo: true };
+      db.grupos.push(g);
+    }
+    sv.grupoId = g.id;
+  });
+  return db;
+}
+
 /** Cuenta de un concepto; la clasificación del producto (o su línea/grupo padre) puede tener su propia cuenta. */
 function cuentaDe(db, concepto, producto) {
   const base = Object.assign(cuentasBase(), (db.config && db.config.contabilidad) || {});
@@ -287,10 +404,12 @@ function calcularFactura(f) {
   const iva = f.iva !== undefined && f.iva !== '' ? r2(f.iva)
     : porLinea ? r2(f.lineas.reduce((s, l) => s + Number(l.valorFacturado || 0) * Number(l.ivaPct) / 100, 0))
     : r2(subtotal * (Number(f.ivaPct) || 0) / 100);
+  // IVA que no se puede descontar (mayor valor del gasto): va al gasto del producto y no a la 2408.
+  const ivaNoDescontable = porLinea && !(f.iva !== undefined && f.iva !== '') ? r2(f.lineas.filter((l) => l.ivaNoDescontable).reduce((s, l) => s + Number(l.valorFacturado || 0) * Number(l.ivaPct) / 100, 0)) : 0;
   const retefuente = r2(subtotal * (Number(f.retefuentePct) || 0) / 100);
   const reteiva = r2(iva * (Number(f.reteivaPct) || 0) / 100);
   const reteica = r2(subtotal * (Number(f.reteicaPct) || 0) / 100);
-  return { recibido, subtotal, difPrecio: r2(subtotal - recibido), iva, retefuente, reteiva, reteica, total: r2(subtotal + iva - retefuente - reteiva - reteica) };
+  return { recibido, subtotal, difPrecio: r2(subtotal - recibido), iva, ivaNoDescontable, retefuente, reteiva, reteica, total: r2(subtotal + iva - retefuente - reteiva - reteica) };
 }
 function validarFactura(db, f, hoy) {
   const e = [];
@@ -424,11 +543,18 @@ function comprobantesContables(db, state, f) {
       if (dif > 0) add('difPrecio', p, dif, 0, '', '', 'Diferencia de precio ' + ref);
       if (dif < 0) add('difPrecio', p, 0, -dif, '', '', 'Diferencia de precio ' + ref);
     });
-    add('ivaDescontable', null, t.iva, 0, n, '', 'IVA ' + ref);
-    add('retefuente', null, 0, t.retefuente, n, '', 'Retención en la fuente ' + ref);
+    add('ivaDescontable', null, r2(t.iva - t.ivaNoDescontable), 0, n, '', 'IVA ' + ref);
+    fp.lineas.filter((l) => l.ivaNoDescontable).forEach((l) => {
+      const p = db.productos.find((x) => x.id === l.productoId);
+      add('costoConsumo', p, r2(Number(l.valorFacturado || 0) * Number(l.ivaPct) / 100), 0, '', '', 'IVA mayor valor del gasto ' + ref);
+    });
+    const rc = (cfg.retenciones && cfg.retenciones.porConcepto && cfg.retenciones.porConcepto[fp.conceptoRetencion]) || {};
+    add('retefuente', null, 0, t.retefuente, n, '', 'Retención en la fuente' + (fp.conceptoRetencion ? ' (' + (CONCEPTOS_RETENCION[fp.conceptoRetencion] || '') + ')' : '') + ' ' + ref, rc.cuenta && esDeMovimiento(db, rc.cuenta) ? rc.cuenta : '');
     add('reteiva', null, 0, t.reteiva, n, '', 'ReteIVA ' + ref);
     add('reteica', null, 0, t.reteica, n, '', 'ReteICA ' + ref);
-    add('proveedores', null, 0, t.total, n, '', 'Factura ' + ref, ctaProv(fp.proveedorId));
+    // Cuenta por pagar: la del tercero; si no tiene, la del grupo de los productos (si todos coinciden); si no, la general.
+    const cxpGrupos = [...new Set(fp.lineas.map((l) => cuentaDe(db, 'proveedores', db.productos.find((x) => x.id === l.productoId)).cuenta))];
+    add('proveedores', null, 0, t.total, n, '', 'Factura ' + ref, ctaProv(fp.proveedorId) || (cxpGrupos.length === 1 ? cxpGrupos[0] : ''));
     emitir({ id: fp.id, fecha: fp.fecha, num: 'CT-' + fp.num, documento: fp.num, tipo: 'Factura de proveedor', origen: 'compras', descripcion: (db.proveedores.find((x) => x.id === fp.proveedorId) || {}).nombre + ' · ' + ref }, lineas, fp.anulado ? fp.anulacion || {} : null);
   });
   db.cierres.forEach((ci) => {
@@ -777,15 +903,20 @@ function validarTercero(db, t) {
   return e;
 }
 
-/** Retenciones e IVA sugeridos para una factura de este proveedor (ficha del tercero › configuración general). */
-function impuestosSugeridos(db, t) {
+/** Tipo de concepto de retención común a los productos de una factura ('' si son de conceptos distintos o no tienen). */
+function conceptoRetencionLineas(db, productoIds) {
+  const c = [...new Set(productoIds.map((id) => conceptoRetencionDe(db, db.productos.find((p) => p.id === id))))];
+  return c.length === 1 ? c[0] : '';
+}
+/** Retenciones e IVA sugeridos para una factura de este proveedor (ficha del tercero › tipo de concepto del grupo › configuración general). */
+function impuestosSugeridos(db, t, concepto) {
   const ret = Object.assign({ retefuentePct: 0, reteivaPct: 0, reteicaPct: 0 }, ((db.config || {}).contabilidad || {}).retenciones || {});
   const x = t ? normalizarTercero(t) : {};
   const resp = x.responsabilidades || [];
   const num = (v, d) => (v === '' || v === undefined || v === null ? d : Number(v));
   return {
     ivaPct: x.responsableIva === false ? 0 : 19,
-    retefuentePct: resp.includes('O-15') ? 0 : num(x.retefuentePct, Number(ret.retefuentePct) || 0),
+    retefuentePct: resp.includes('O-15') ? 0 : num(x.retefuentePct, num(((ret.porConcepto || {})[concepto] || {}).pct, Number(ret.retefuentePct) || 0)),
     reteivaPct: x.responsableIva === false ? 0 : Number(ret.reteivaPct) || 0,
     reteicaPct: num(x.reteicaPct, Number(ret.reteicaPct) || 0)
   };
@@ -865,13 +996,18 @@ function bodegaEnUso(db, nombre) {
 const NIVELES_GRUPO = { 1: 'Línea', 2: 'Grupo', 3: 'Subgrupo' };
 const TIPOS_MATERIAL = {
   consumible: 'Insumo consumible', dispositivo: 'Dispositivo médico', medicamento: 'Medicamento',
-  instrumental: 'Instrumental reutilizable', repuesto: 'Repuesto o accesorio de equipo', activo: 'Activo menor / dotación'
+  instrumental: 'Instrumental reutilizable', producto: 'Producto para la venta', equipo: 'Equipo biomédico', repuesto: 'Repuesto o accesorio de equipo', activo: 'Activo menor / dotación'
 };
 // ---------- Ficha del producto ----------
 const UNIDADES = ['unidad', 'caja', 'paquete', 'frasco', 'tubo', 'jeringa', 'cartucho', 'ampolla', 'sobre', 'bolsa', 'rollo', 'par', 'kit', 'blíster', 'galón', 'litro', 'mililitro', 'gramo', 'kilogramo', 'metro'];
 /** Tratamiento de IVA del producto (ET arts. 424, 468-1 y 477). */
-const TARIFAS_IVA = { '19': 'Gravado 19 %', '5': 'Gravado 5 %', exento: 'Exento (0 %)', excluido: 'Excluido de IVA' };
-function pctIva(tarifa) { return tarifa === '19' ? 19 : tarifa === '5' ? 5 : tarifa === 'exento' || tarifa === 'excluido' ? 0 : null; }
+const TARIFAS_IVA = { '19': 'Gravado 19 %', '5': 'Gravado 5 %', '19nd': 'IVA 19 % mayor valor del gasto (no descontable)', exento: 'Exento (0 %)', excluido: 'Excluido de IVA' };
+function pctIva(tarifa) { return tarifa === '19' || tarifa === '19nd' ? 19 : tarifa === '5' ? 5 : tarifa === 'exento' || tarifa === 'excluido' ? 0 : null; }
+/** Tarifa de IVA de compra de un producto: la de su ficha o la de su grupo. */
+function tarifaCompra(db, p) { return (p && p.tarifaIva) || (p && datoGrupo(db, p.grupoId, 'tarifaIvaCompra')) || ''; }
+function tarifaVenta(db, p) { return (p && p.tarifaIvaVenta) || (p && datoGrupo(db, p.grupoId, 'tarifaIvaVenta')) || ''; }
+/** Tipo de concepto de retención de un producto (por su grupo). */
+function conceptoRetencionDe(db, p) { return (p && datoGrupo(db, p.grupoId, 'conceptoRetencion')) || ''; }
 const FORMAS_FARMACEUTICAS = { cartucho: 'Cartucho anestésico', solucionIny: 'Solución inyectable', tableta: 'Tableta', capsula: 'Cápsula', solucionOral: 'Solución oral', suspension: 'Suspensión', enjuague: 'Enjuague bucal', gel: 'Gel', crema: 'Crema o ungüento', aerosol: 'Aerosol o spray', polvo: 'Polvo', otra: 'Otra' };
 const VIAS_ADMIN = { infiltrativa: 'Infiltrativa (anestesia local)', oral: 'Oral', topica: 'Tópica', intravenosa: 'Intravenosa', intramuscular: 'Intramuscular', subcutanea: 'Subcutánea', otra: 'Otra' };
 const ESTERILIZACION = { vapor: 'Vapor (autoclave)', calorSeco: 'Calor seco', oxidoEtileno: 'Óxido de etileno', radiacion: 'Radiación', peroxido: 'Peróxido de hidrógeno (plasma)', noAplica: 'No aplica' };
@@ -923,6 +1059,12 @@ function validarProducto(db, p) {
     if (!String(p.concentracion || '').trim()) e.push('Medicamento: escriba la concentración.');
     if (!FORMAS_FARMACEUTICAS[p.formaFarmaceutica]) e.push('Medicamento: elija la forma farmacéutica.');
   }
+  if (p.grupoId) {
+    const cg = clasificacionGrupo(db, p.grupoId);
+    if (cg && CLASIF_SERVICIO.includes(cg)) e.push('El grupo elegido es de ' + CLASIFICACIONES[cg].toLowerCase() + 's; elija un grupo de productos.');
+    else if (cg && p.clasificacion && cg !== p.clasificacion) e.push('El grupo elegido es de clasificación "' + CLASIFICACIONES[cg] + '" y el producto es "' + CLASIFICACIONES[p.clasificacion] + '".');
+  }
+  if (p.tarifaIvaVenta && !TARIFAS_IVA[p.tarifaIvaVenta]) e.push('Elija el IVA en ventas.');
   if (p.implantable && p.controlaLote === false) e.push('Un dispositivo implantable debe manejar lote (trazabilidad, Res. 4816/2008).');
   if (p.controlaVence !== false && p.controlaLote === false) e.push('Si maneja fecha de vencimiento debe manejar lote.');
   const provs = (p.proveedores || []).filter((x) => x.proveedorId);
@@ -986,7 +1128,7 @@ function gruposDescendientes(db, id) {
 function arbolGrupos(db) {
   const out = [];
   const visitar = (padre, nivel) => db.grupos.filter((g) => (g.parentId || '') === padre)
-    .sort((a, b) => String(a.codigo).localeCompare(String(b.codigo)))
+    .sort((a, b) => (Number(a.orden) || 9999) - (Number(b.orden) || 9999) || String(a.codigo).localeCompare(String(b.codigo)))
     .forEach((g) => { out.push(Object.assign({}, g, { nivel, ruta: rutaGrupo(db, g.id) })); visitar(g.id, nivel + 1); });
   visitar('', 1);
   db.grupos.filter((g) => !out.some((x) => x.id === g.id)).forEach((g) => out.push(Object.assign({}, g, { nivel: 1, ruta: g.nombre })));
@@ -1859,7 +2001,8 @@ const COLUMNAS_IMPORT = {
   costoUnit: ['costo', 'costo unitario', 'costo unit', 'valor unitario', 'precio'],
   // Datos opcionales de la ficha
   codigoAlterno: ['codigo alterno', 'código alterno', 'codigo anterior', 'código anterior'],
-  grupo: ['clasificacion', 'clasificación', 'linea', 'línea', 'grupo', 'subgrupo'],
+  clasificacion: ['clasificacion', 'clasificación'],
+  grupo: ['linea', 'línea', 'grupo', 'subgrupo'],
   tipoMaterial: ['tipo de material', 'tipo material'],
   marca: ['marca'],
   referencia: ['referencia', 'referencia del fabricante', 'ref fabricante'],
@@ -1912,10 +2055,12 @@ function interpretarImportacion(filas, db) {
     if (has('tarifaIva')) { const t = norm(txt(f, 'tarifaIva')); const n = (t.match(/\d+/) || [''])[0]; d.tarifaIva = t.includes('excl') ? 'excluido' : t.includes('exen') || n === '0' ? 'exento' : n === '5' ? '5' : '19'; }
     if (idx.cadenaFrio !== undefined) d.cadenaFrio = si(txt(f, 'cadenaFrio'));
     if (idx.implantable !== undefined) d.implantable = si(txt(f, 'implantable'));
+    if (has('clasificacion')) { const c = buscarEn(CLASIFICACIONES, txt(f, 'clasificacion').replace(/s$/i, '')) || buscarEn(CLASIFICACIONES, txt(f, 'clasificacion')); if (c && CLASIF_PRODUCTO.includes(c)) d.clasificacion = c; }
     if (has('grupo')) {
       const n = norm(txt(f, 'grupo'));
       const g = db.grupos.find((x) => norm(x.nombre) === n || norm(rutaGrupo(db, x.id)) === n || norm(x.codigo) === n);
       d.grupoId = g ? g.id : '';
+      if (g && !d.clasificacion) { const c = clasificacionGrupo(db, g.id); if (CLASIF_PRODUCTO.includes(c)) d.clasificacion = c; }
     }
     if (has('proveedor')) {
       const q = txt(f, 'proveedor'); const dig = q.split('-')[0].replace(/\D/g, '');
@@ -2052,6 +2197,7 @@ export {
   baseLinea, pendientesPorFacturar, calcularFactura, validarFactura, validarComprobanteManual,
   balanceComprobacion, estadoCosto, COLUMNAS_INTERFAZ, archivoInterfaz, interpretarPlanCuentas, interpretarTerceros,
   NIVELES_GRUPO, TIPOS_MATERIAL, nivelGrupo, rutaGrupo, gruposDescendientes, arbolGrupos, lineasMovimiento,
+  CLASIFICACIONES, CLASIF_PRODUCTO, CLASIF_SERVICIO, CONCEPTOS_RETENCION, retencionesPorConceptoBase, grupoRaiz, datoGrupo, clasificacionGrupo, clasificacionProducto, validarGrupo, validarServicio, migrarClasificacion, tarifaCompra, tarifaVenta, conceptoRetencionDe, conceptoRetencionLineas,
   UNIDADES, TARIFAS_IVA, pctIva, FORMAS_FARMACEUTICAS, VIAS_ADMIN, ESTERILIZACION, POLITICAS_REPOSICION, gtinValido, validarProducto, precioPactado, validarOrdenCompra,
   TIPOS_DOC, TIPOS_TERCERO, SEXOS, REGIMENES, RESPONSABILIDADES, MEDIOS_PAGO, PLAZOS_PAGO, TIPOS_CUENTA_BANCO, TIPOS_TRABAJADOR, SUBTIPOS_TRABAJADOR, TIPOS_CONTRATO, PERIODICIDADES, DEPARTAMENTOS, DEPARTAMENTOS_CO, PAISES, MUNICIPIOS, enColombia, ubicarColombia, departamentoDane, paisIso, nombreTercero, partirNombre, validarTercero, impuestosSugeridos, calcularDV, documentoTercero, normalizarTercero,
   TIPOS_BODEGA, sincronizarBodegas, renombrarBodega, bodegaEnUso,

@@ -24,28 +24,38 @@ export function crearDemo(hoy) {
     { id: 'b4', codigo: 'NV', nombre: NV, tipo: 'nevera', responsable: 'Auxiliar de odontología', sede: 'Sede principal', activa: true }
   ];
   C.sincronizarBodegas(db);
-  const G = (id, codigo, nombre, parentId, descripcion) => ({ id, codigo, nombre, parentId: parentId || '', descripcion: descripcion || '' });
+  const G = (id, codigo, nombre, parentId, extra) => Object.assign({ id, codigo, nombre, parentId: parentId || '', descripcion: '', activo: true }, extra || {});
+  // Grupos de procedimientos, productos, insumos y servicios. La clasificación la define la línea (primer nivel).
   db.grupos = [
-    G('l1', '01', 'Operatoria y restauración'),
+    G('l1', '01', 'Operatoria y restauración', '', { clasificacion: 'insumo', conceptoRetencion: 'compras', tarifaIvaCompra: '19', orden: 1 }),
     G('g11', '0101', 'Resinas y adhesivos', 'l1'),
     G('s111', '010101', 'Resinas compuestas', 'g11'),
     G('s112', '010102', 'Adhesivos', 'g11'),
     G('g12', '0102', 'Ionómeros y cementos', 'l1'),
-    G('l2', '02', 'Anestesia'),
+    G('l2', '02', 'Anestesia', '', { clasificacion: 'medicamento', conceptoRetencion: 'compras', tarifaIvaCompra: 'excluido', tarifaIvaVenta: 'excluido', orden: 2 }),
     G('g21', '0201', 'Anestésicos locales', 'l2'),
-    G('g22', '0202', 'Agujas y carpules', 'l2'),
-    G('l3', '03', 'Bioseguridad'),
+    G('l8', '08', 'Agujas y material de un solo uso', '', { clasificacion: 'dispositivo', conceptoRetencion: 'compras', tarifaIvaCompra: '19', orden: 3 }),
+    G('g22', '0801', 'Agujas y carpules', 'l8'),
+    G('l3', '03', 'Bioseguridad (EPP)', '', { clasificacion: 'insumo', conceptoRetencion: 'compras', tarifaIvaCompra: '19', orden: 4 }),
     G('g31', '0301', 'Guantes', 'l3'),
-    G('l4', '04', 'Cirugía e implantología'),
+    G('l4', '04', 'Cirugía e implantología', '', { clasificacion: 'dispositivo', conceptoRetencion: 'compras', tarifaIvaCompra: 'excluido', orden: 5 }),
     G('g41', '0401', 'Implantes', 'l4'),
-    G('l5', '05', 'Instrumental'),
+    G('l5', '05', 'Instrumental', '', { clasificacion: 'dispositivo', conceptoRetencion: 'compras', tarifaIvaCompra: '19', manejaEsterilizacion: true, orden: 6 }),
     G('g51', '0501', 'Fresas y rotatorio', 'l5'),
-    G('l6', '06', 'Impresión y modelos'),
+    G('l6', '06', 'Impresión y modelos', '', { clasificacion: 'insumo', conceptoRetencion: 'compras', tarifaIvaCompra: '19', orden: 7 }),
     G('g61', '0601', 'Alginatos', 'l6'),
-    G('l7', '07', 'Higiene, profilaxis y desinfección'),
+    G('l7', '07', 'Higiene, profilaxis y desinfección', '', { clasificacion: 'insumo', conceptoRetencion: 'compras', tarifaIvaCompra: '19', orden: 8 }),
     G('g71', '0701', 'Profilaxis', 'l7'),
-    G('g72', '0702', 'Desinfectantes e irrigantes', 'l7')
+    G('g72', '0702', 'Desinfectantes e irrigantes', 'l7'),
+    G('l9', '09', 'Productos de higiene oral para la venta', '', { clasificacion: 'producto', conceptoRetencion: 'compras', tarifaIvaCompra: '19', tarifaIvaVenta: '19', orden: 9 }),
+    G('l10', '10', 'Equipos de la clínica', '', { clasificacion: 'equipo', conceptoRetencion: 'compras', tarifaIvaCompra: '19nd', orden: 10 }),
+    G('sv1', 'P01', 'Operatoria', '', { clasificacion: 'procedimiento', tarifaIvaVenta: 'excluido', cuentas: { ingreso: '4165' }, orden: 20 }),
+    G('sv2', 'P02', 'Cirugía e implantología', '', { clasificacion: 'procedimiento', tarifaIvaVenta: 'excluido', cuentas: { ingreso: '4165' }, manejaEsterilizacion: true, orden: 21 }),
+    G('sv3', 'P03', 'Higiene oral', '', { clasificacion: 'procedimiento', tarifaIvaVenta: 'excluido', cuentas: { ingreso: '4165' }, orden: 22 }),
+    G('sv4', 'S01', 'Consulta', '', { clasificacion: 'servicio', tarifaIvaVenta: 'excluido', cuentas: { ingreso: '4165' }, orden: 23 }),
+    G('sv5', 'S02', 'Laboratorio dental externo', '', { clasificacion: 'servicio', conceptoRetencion: 'servicios', tarifaIvaCompra: '19nd', orden: 24 })
   ];
+
 
 
   db.usuarios = USUARIOS_DEMO.map(([usuario, nombre, rol, pin, bodega]) => ({
@@ -85,10 +95,10 @@ export function crearDemo(hoy) {
   ];
 
   db.servicios = [
-    { id: 'k1', codigo: 'SRV-RES2', nombre: 'Resina clase II', categoria: 'Operatoria', cups: '', precio: 180000, ivaPct: 0, duracion: 45, activo: true, lineas: [{ productoId: 'p1', cantidad: 0.25 }, { productoId: 'p3', cantidad: 1 }, { productoId: 'p6', cantidad: 1 }, { productoId: 'p2', cantidad: 0.02 }] },
-    { id: 'k2', codigo: 'SRV-IMP', nombre: 'Implante unitario', categoria: 'Cirugía e implantología', cups: '', precio: 2800000, ivaPct: 0, duracion: 90, activo: true, lineas: [{ productoId: 'p7', cantidad: 1 }, { productoId: 'p3', cantidad: 2 }, { productoId: 'p6', cantidad: 2 }, { productoId: 'p2', cantidad: 0.04 }] },
-    { id: 'k3', codigo: 'SRV-PROF', nombre: 'Profilaxis', categoria: 'Higiene oral', cups: '', precio: 90000, ivaPct: 0, duracion: 30, activo: true, lineas: [{ productoId: 'p11', cantidad: 1 }, { productoId: 'p2', cantidad: 0.02 }] },
-    { id: 'k4', codigo: 'SRV-VAL', nombre: 'Consulta de valoración', categoria: 'Consulta', cups: '', precio: 60000, ivaPct: 0, duracion: 20, activo: true, lineas: [{ productoId: 'p2', cantidad: 0.02 }] }
+    { id: 'k1', grupoId: 'sv1', codigo: 'SRV-RES2', nombre: 'Resina clase II', categoria: 'Operatoria', cups: '', precio: 180000, ivaPct: 0, duracion: 45, activo: true, lineas: [{ productoId: 'p1', cantidad: 0.25 }, { productoId: 'p3', cantidad: 1 }, { productoId: 'p6', cantidad: 1 }, { productoId: 'p2', cantidad: 0.02 }] },
+    { id: 'k2', grupoId: 'sv2', codigo: 'SRV-IMP', nombre: 'Implante unitario', categoria: 'Cirugía e implantología', cups: '', precio: 2800000, ivaPct: 0, duracion: 90, activo: true, lineas: [{ productoId: 'p7', cantidad: 1 }, { productoId: 'p3', cantidad: 2 }, { productoId: 'p6', cantidad: 2 }, { productoId: 'p2', cantidad: 0.04 }] },
+    { id: 'k3', grupoId: 'sv3', codigo: 'SRV-PROF', nombre: 'Profilaxis', categoria: 'Higiene oral', cups: '', precio: 90000, ivaPct: 0, duracion: 30, activo: true, lineas: [{ productoId: 'p11', cantidad: 1 }, { productoId: 'p2', cantidad: 0.02 }] },
+    { id: 'k4', grupoId: 'sv4', codigo: 'SRV-VAL', nombre: 'Consulta de valoración', categoria: 'Consulta', cups: '', precio: 60000, ivaPct: 0, duracion: 20, activo: true, lineas: [{ productoId: 'p2', cantidad: 0.02 }] }
   ];
   db.kits = [];
 

@@ -69,7 +69,7 @@ const MODULOS = [
     ['productos', 'Productos e insumos', Boxes, Productos],
     ['kits', 'Servicios', Stethoscope, Kits],
     ['lotes', 'Lotes', Tags, LotesMaestro],
-    ['grupos', 'Clasificación', FolderTree, Grupos],
+    ['grupos', 'Grupos', FolderTree, Grupos],
     ['importar', 'Carga desde Excel', FileSpreadsheet, Importar, 'importar']
   ]],
   ['terceros', 'Terceros', Contact, [

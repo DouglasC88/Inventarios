@@ -49,12 +49,15 @@ export function SelectBodega({ value, onChange, soloPropia, incluirTodas, exclui
 }
 
 /** Buscador de grupos de la clasificación (muestra la ruta Línea › Grupo › Subgrupo). */
-export function SelectGrupo({ value, onChange, incluirTodos, incluirSin, placeholder }) {
+/** Buscador de grupos. clasificaciones: solo los grupos de esas clasificaciones (por ejemplo, los de insumos). */
+export function SelectGrupo({ value, onChange, incluirTodos, incluirSin, placeholder, clasificaciones }) {
   const { db } = useStore();
   const options = [
     ...(incluirTodos ? [{ value: 'todos', label: 'Todos los grupos', sub: 'Sin filtro' }] : []),
-    ...(incluirSin ? [{ value: 'sin', label: 'Sin clasificar', sub: 'Productos sin grupo' }] : []),
-    ...C.arbolGrupos(db).map((g) => ({ value: g.id, label: '\u2003'.repeat(g.nivel - 1) + g.codigo + ' · ' + g.nombre, sub: C.NIVELES_GRUPO[Math.min(g.nivel, 3)] + ' · ' + g.ruta, search: g.ruta }))
+    ...(incluirSin ? [{ value: 'sin', label: 'Sin clasificar', sub: 'Sin grupo' }] : []),
+    ...C.arbolGrupos(db)
+      .filter((g) => g.id === value || ((g.activo !== false) && (!clasificaciones || clasificaciones.includes(C.clasificacionGrupo(db, g.id)))))
+      .map((g) => ({ value: g.id, label: '\u2003'.repeat(g.nivel - 1) + g.codigo + ' · ' + g.nombre, sub: (C.CLASIFICACIONES[C.clasificacionGrupo(db, g.id)] || 'Sin clasificación') + ' · ' + g.ruta, search: g.ruta + ' ' + (C.CLASIFICACIONES[C.clasificacionGrupo(db, g.id)] || '') }))
   ];
   return <Combo value={value} onChange={onChange} options={options} placeholder={placeholder || 'Escriba línea, grupo o subgrupo…'} />;
 }
